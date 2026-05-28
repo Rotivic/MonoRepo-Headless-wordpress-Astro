@@ -4,8 +4,12 @@ web/app/plugins/*
 !web/app/plugins/.gitkeep
 # Ignore Composer-installed mu-plugin directories; single-file mu-plugins are tracked intentionally
 web/app/mu-plugins/*/
+!web/app/mu-plugins/tcg-api/
+!web/app/mu-plugins/tcg-api/**
 web/app/themes/twentytwentyfive/
 web/app/upgrade
+web/app/languages/*
+!web/app/languages/.gitkeep
 web/app/uploads/*
 !web/app/uploads/.gitkeep
 web/app/cache/*

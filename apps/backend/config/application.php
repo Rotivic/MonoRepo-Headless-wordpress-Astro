@@ -94,6 +94,7 @@ if (!defined('WP_DEVELOPMENT_MODE')) {
  */
 Config::define('WP_HOME', env('WP_HOME'));
 Config::define('WP_SITEURL', env('WP_SITEURL'));
+Config::define('WPLANG', env('WP_LOCALE') ?: 'es_ES');
 
 /**
  * Custom Content Directory

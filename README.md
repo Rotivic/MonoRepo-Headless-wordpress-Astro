@@ -42,7 +42,9 @@ Los servicios principales incluyen healthchecks para ordenar el arranque local:
 ## URLs locales
 
 - Frontend Astro: <http://localhost:4321>
+- Estado del starter: <http://localhost:4321/admin/estado>
 - WordPress REST API: <http://localhost:8080/wp-json/>
+- API health: <http://localhost:8080/wp-json/tcg/v1/health>
 - WordPress admin: <http://localhost:8080/wp/wp-admin/>
 - Mailpit: <http://localhost:8025>
 - Adminer MySQL opcional: <http://localhost:8081>
@@ -171,6 +173,7 @@ WP_MAIL_FROM_NAME=TCG Platform
 
 WP_HOME=http://localhost:8080
 WP_SITEURL=${WP_HOME}/wp
+WP_LOCALE=es_ES
 ```
 
 El servicio `php` usa una imagen propia definida en:
@@ -193,6 +196,7 @@ Plugins gestionados por Composer:
 - Redis Object Cache
 - WooCommerce
 - Advanced Custom Fields
+- Fluent Forms
 
 El entrypoint del contenedor PHP es:
 
@@ -205,10 +209,16 @@ Ese script:
 - Entra en `/var/www/html`
 - Instala dependencias Composer si el volumen `vendor` esta vacio
 - Espera a que MySQL acepte conexiones
-- Comprueba si WordPress ya tiene tablas instaladas
+- Comprueba con WP-CLI si WordPress esta instalado en la base de datos
 - Instala WordPress si la base esta vacia
-- Crea el marcador `.initialized`
+- Configura permalinks para que `/wp-json` y las rutas REST funcionen correctamente
+- Activa los plugins base si estan disponibles
+- Instala traducciones del core y plugins para `WP_LOCALE`
+- Ejecuta la semilla demo inicial si `WP_DEMO_SEED` no esta desactivado
+- Crea el marcador local `.initialized`
 - Arranca `php-fpm`
+
+El marcador `.initialized` es solo una pista local de runtime y esta ignorado por Git. El bootstrap real no depende de ese archivo: siempre pregunta a WordPress si la base esta instalada. Esto evita que un clon nuevo arranque contra una base vacia pensando que ya estaba inicializada.
 
 ### Montaje optimizado en Windows
 
@@ -249,6 +259,7 @@ Plugins base instalados:
 wpackagist-plugin/redis-cache
 wpackagist-plugin/woocommerce
 wpackagist-plugin/advanced-custom-fields
+wpackagist-plugin/fluentform
 ```
 
 Para instalar un plugin nuevo:
@@ -273,13 +284,50 @@ http://localhost:8080/wp-json/wc/store/v1/products
 
 ACF permite definir campos personalizados desde WordPress. Para consumir esos campos desde Astro o Flutter, marca los grupos/campos necesarios como visibles en REST cuando corresponda. Si en el futuro necesitas ACF Pro, no se instala desde WPackagist publico: requiere licencia y repositorio Composer privado o un flujo privado equivalente.
 
-La plantilla incluye un seed opcional de productos demo:
+Fluent Forms queda disponible para formularios gestionados desde WordPress. En una implementacion real conviene exponer solo los formularios necesarios al frontend y validar cada envio con permisos, rate limit, captcha/honeypot o doble opt-in segun el caso.
+
+### Hardening headless
+
+El starter incluye un mu-plugin de endurecimiento en `apps/backend/web/app/mu-plugins/tcg-hardening.php`:
+
+- Redirige el frontend publico de WordPress hacia Astro.
+- Reserva `wp-admin` para administradores y gestores de tienda.
+- Limita al `shop_manager` a gestion operativa de WooCommerce/productos/pedidos.
+- Oculta menus internos como temas, plugins, ajustes, usuarios y ACF para gestores de tienda.
+- Desactiva comentarios, pingbacks, trackbacks, XML-RPC y endpoints REST de comentarios.
+- Mantiene plugins/temas gestionados por Composer, no desde el panel.
+
+La regla base es que WordPress sea fuente de datos y gestion interna, mientras que la experiencia publica viva en Astro/Flutter.
+
+El idioma por defecto es `es_ES`. El core y las traducciones disponibles de plugins se instalan desde WP-CLI durante el arranque. Los ficheros descargados en `web/app/languages` no se versionan porque son artefactos regenerables.
+
+La plantilla incluye seeds demo para dejar un entorno util desde el primer arranque:
 
 ```sh
 npm run backend:seed
 ```
 
-Ese comando crea productos simples de ejemplo si no existen, utiles para probar tienda, producto y carrito sin configurar catalogo manualmente.
+El primer `docker compose up -d --build` ejecuta `scripts/seed-demo-all.php` por defecto. Esto crea contenido de ejemplo, productos demo y usuarios base si no existen:
+
+```text
+admin_demo      admin.demo@example.test       administrator
+vendedor_demo   vendedor.demo@example.test    shop_manager
+cliente_demo    cliente.demo@example.test     customer
+```
+
+Password demo:
+
+```text
+PasswordDemo123!
+```
+
+Para arrancar una instalacion limpia sin contenido demo, define:
+
+```env
+WP_DEMO_SEED=false
+```
+
+Puedes volver a lanzar los seeds manualmente con `npm run backend:seed` o con los comandos separados `npm run seed:shop`, `npm run seed:blog` y `npm run seed:users`.
 
 ## Frontend Astro
 

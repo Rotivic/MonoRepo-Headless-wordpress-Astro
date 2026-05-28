@@ -4,6 +4,7 @@ import ModuleDisabled from '../components/ModuleDisabled.astro';
 import SiteHeader from '../components/SiteHeader.astro';
 import Pagination from '../components/Pagination.astro';
 import { siteConfig } from '../config/site';
+import { tcgApi } from '../lib/tcg-api';
 import { formatStorePrice, shopApiInternal, type StoreProduct } from '../lib/shop';
 import BaseLayout from '../layouts/BaseLayout.astro';
 
@@ -26,7 +27,7 @@ if (siteConfig.features.shop) {
 
   {
     siteConfig.features.shop ? (
-      <main class="inventory-view">
+      <main class="inventory-view" id="backoffice-page" hidden>
         <section class="page-shell inventory-shell">
           <div>
             <BackButton fallback="/admin" />
@@ -63,6 +64,21 @@ if (siteConfig.features.shop) {
       />
     )
   }
+
+  <script define:vars={{ meUrl: tcgApi.me }}>
+    const page = document.querySelector('#backoffice-page');
+
+    fetch(meUrl, { credentials: 'include' })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Debes iniciar sesion.');
+        const payload = await response.json();
+        if (!payload.data?.can_access_backoffice) throw new Error('Sin permisos.');
+        if (page) page.hidden = false;
+      })
+      .catch(() => {
+        window.location.assign('/login');
+      });
+  </script>
 
   <script>
     import { setupLocalPagination } from '../lib/pagination';

@@ -46,6 +46,7 @@
     "vlucas/phpdotenv": "^5.0",
     "wp-theme/twentytwentyfive": "^1.0",
     "wpackagist-plugin/advanced-custom-fields": "^6.8",
+    "wpackagist-plugin/fluentform": "^6.2",
     "wpackagist-plugin/redis-cache": "^2.8",
     "wpackagist-plugin/woocommerce": "^10.8"
   },

@@ -1,6 +1,5 @@
 ---
 import { getCollection } from 'astro:content';
-import ApiStatus from '../components/ApiStatus.astro';
 import FeatureCard from '../components/FeatureCard.astro';
 import SiteHeader from '../components/SiteHeader.astro';
 import { siteConfig } from '../config/site';
@@ -24,7 +23,10 @@ const modules = (await getCollection('modules')).sort(
         </p>
       </div>
 
-      <ApiStatus apiUrl={`${siteConfig.apiUrl}/tcg/v1/health`} />
+      <div class="starter-panel">
+        <strong>Starter kit activo</strong>
+        <span>Gestiona diagnostico, usuarios e inventario desde el panel de administracion.</span>
+      </div>
     </section>
 
     <section class="grid" aria-label="Modulos iniciales">
@@ -46,6 +48,24 @@ const modules = (await getCollection('modules')).sort(
     width: min(1120px, calc(100% - 32px));
     margin: 0 auto;
     padding: 56px 0;
+  }
+
+  .starter-panel {
+    display: grid;
+    gap: 8px;
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-item);
+    background: var(--color-canvas);
+    padding: 18px;
+  }
+
+  .starter-panel strong {
+    font-size: 1rem;
+  }
+
+  .starter-panel span {
+    color: var(--color-body);
+    line-height: 1.55;
   }
 
   .status {

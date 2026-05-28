@@ -21,6 +21,7 @@ services:
       WP_MAIL_FROM: no-reply@tcg-platform.local
       WP_MAIL_FROM_NAME: TCG Platform
       PUBLIC_FRONTEND_URL: http://localhost:4321
+      WP_LOCALE: ${WP_LOCALE:-es_ES}
     entrypoint: /usr/local/bin/init.sh
     healthcheck:
       test: ["CMD-SHELL", "php -r '$$s=@fsockopen(\"127.0.0.1\",9000); exit($$s?0:1);'"]

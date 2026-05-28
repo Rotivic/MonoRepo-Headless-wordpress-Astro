@@ -3,6 +3,8 @@ import SiteHeader from '../components/SiteHeader.astro';
 import { siteConfig } from '../config/site';
 import { tcgApi } from '../lib/tcg-api';
 import BaseLayout from '../layouts/BaseLayout.astro';
+
+const wpAdminUrl = siteConfig.apiUrl.replace(/\/wp-json\/?$/, '/wp/wp-admin/');
 ---
 
 <BaseLayout title={`Admin | ${siteConfig.name}`}>
@@ -19,11 +21,15 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       <section class="admin-panel" id="admin-panel" data-state="loading">
         <p id="admin-status">Comprobando permisos...</p>
         <div class="admin-grid" id="admin-grid" hidden>
-          <a href="http://localhost:8080/wp/wp-admin/">WordPress admin</a>
-          <a href="/usuarios">Listado de usuarios</a>
-          <a href="/inventario">Inventario</a>
-          <a href="/ventas">Ventas</a>
-          <a href="/mis-pedidos">Pedidos usuario</a>
+          <a class="admin-only" href={`${wpAdminUrl}`}>WordPress admin</a>
+          <a class="admin-only" href="/usuarios">Listado de usuarios</a>
+          <a href="/inventario">Inventario frontend</a>
+          <a href="/ventas">Ventas frontend</a>
+          <a href={`${wpAdminUrl}edit.php?post_type=product`}>Productos en WordPress</a>
+          <a href={`${wpAdminUrl}admin.php?page=wc-orders`}>Pedidos en WordPress</a>
+          <a href={`${wpAdminUrl}admin.php?page=wc-settings`}>Ajustes WooCommerce</a>
+          <a class="admin-only" href={`${wpAdminUrl}edit.php?post_type=acf-field-group`}>Campos ACF</a>
+          <a class="admin-only" href="/admin/estado">Estado del sistema</a>
         </div>
       </section>
     </section>
@@ -38,10 +44,15 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       .then(async (response) => {
         if (!response.ok) throw new Error('Debes iniciar sesion.');
         const payload = await response.json();
-        if (!payload.data?.is_admin) throw new Error('Tu usuario no tiene permisos de administracion.');
+        if (!payload.data?.can_access_backoffice) throw new Error('Tu usuario no tiene permisos de administracion.');
         panel.dataset.state = 'ready';
-        status.textContent = 'Accesos disponibles para administracion.';
+        status.textContent = payload.data?.is_admin
+          ? 'Accesos disponibles para administracion.'
+          : 'Accesos disponibles para gestion de tienda.';
         grid.hidden = false;
+        if (!payload.data?.is_admin) {
+          grid.querySelectorAll('.admin-only').forEach((item) => { item.hidden = true; });
+        }
       })
       .catch((error) => {
         panel.dataset.state = 'error';

@@ -1,0 +1,196 @@
+---
+import SiteHeader from '../../components/SiteHeader.astro';
+import { siteConfig } from '../../config/site';
+import { tcgApi } from '../../lib/tcg-api';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title={`Estado | ${siteConfig.name}`}>
+  <SiteHeader active="perfil" />
+
+  <main class="status-view">
+    <section class="page-shell status-shell">
+      <div>
+        <p class="eyebrow">Administracion</p>
+        <h1>Estado del sistema</h1>
+        <p class="lede">Diagnostico interno para administradores. Comprueba backend, REST API, plugins principales y servicios locales tras levantar Docker.</p>
+        <a class="back-link" href="/admin">Volver a administracion</a>
+      </div>
+
+      <section class="status-panel" id="status-panel" data-state="loading">
+        <div class="panel-head">
+          <div>
+            <h2 id="status-title">Comprobando...</h2>
+            <p id="status-summary">Consultando el endpoint interno de salud.</p>
+          </div>
+          <button class="button button-secondary" id="refresh-status" type="button">Actualizar</button>
+        </div>
+        <div class="checks" id="checks"></div>
+      </section>
+    </section>
+  </main>
+
+  <script define:vars={{ healthUrl: tcgApi.health }}>
+    const panel = document.querySelector('#status-panel');
+    const title = document.querySelector('#status-title');
+    const summary = document.querySelector('#status-summary');
+    const checks = document.querySelector('#checks');
+    const refresh = document.querySelector('#refresh-status');
+
+    const labels = {
+      ok: 'Correcto',
+      warning: 'Aviso',
+      error: 'Error',
+    };
+
+    const render = (payload) => {
+      const state = payload.status === 'ok' ? 'ok' : 'warning';
+      panel.dataset.state = state;
+      title.textContent = payload.status === 'ok' ? 'Todo operativo' : 'Estado degradado';
+      summary.textContent = `Namespace ${payload.namespace || 'tcg/v1'} - ${payload.time || ''}`;
+
+      const entries = Object.entries(payload.checks || {});
+      checks.innerHTML = entries.map(([key, check]) => `
+        <article class="check" data-state="${check.status}">
+          <span>${check.label || key}</span>
+          <strong>${labels[check.status] || check.status}</strong>
+        </article>
+      `).join('');
+    };
+
+    const load = async () => {
+      panel.dataset.state = 'loading';
+      title.textContent = 'Comprobando...';
+      summary.textContent = 'Consultando el endpoint interno de salud.';
+      checks.innerHTML = '';
+
+      try {
+        const response = await fetch(healthUrl, { credentials: 'include' });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.message || `HTTP ${response.status}`);
+        render(payload);
+      } catch (error) {
+        panel.dataset.state = 'error';
+        title.textContent = 'No disponible';
+        summary.textContent = error instanceof Error ? error.message : 'No se pudo comprobar el estado.';
+      }
+    };
+
+    refresh?.addEventListener('click', load);
+    load();
+  </script>
+</BaseLayout>
+
+<style>
+  .status-view {
+    min-height: calc(100vh - 65px);
+    padding: 56px 0;
+    background: var(--color-surface-soft);
+  }
+
+  .status-shell {
+    display: grid;
+    grid-template-columns: minmax(0, 0.85fr) minmax(420px, 1.15fr);
+    gap: 40px;
+    align-items: start;
+  }
+
+  .eyebrow {
+    margin: 0 0 12px;
+    color: var(--color-primary);
+    font-size: 0.82rem;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: clamp(2.6rem, 7vw, 5rem);
+    line-height: 1;
+  }
+
+  .lede,
+  .panel-head p {
+    color: var(--color-body);
+    line-height: 1.7;
+  }
+
+  .back-link {
+    display: inline-flex;
+    margin-top: 20px;
+    font-weight: 800;
+  }
+
+  .status-panel {
+    display: grid;
+    gap: 18px;
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-item);
+    background: var(--color-canvas);
+    padding: 22px;
+  }
+
+  .status-panel[data-state="error"] {
+    border-color: var(--color-danger);
+  }
+
+  .panel-head {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .panel-head h2 {
+    margin: 0;
+    font-size: 1.25rem;
+  }
+
+  .checks {
+    display: grid;
+    gap: 10px;
+  }
+
+  :global(.check) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-item);
+    padding: 14px;
+  }
+
+  :global(.check strong) {
+    border-radius: var(--radius-pill);
+    padding: 5px 10px;
+    background: var(--color-surface-strong);
+    font-size: 0.82rem;
+  }
+
+  :global(.check[data-state="ok"] strong) {
+    background: color-mix(in srgb, var(--color-success), white 84%);
+    color: #08704a;
+  }
+
+  :global(.check[data-state="warning"] strong) {
+    background: #fff4cf;
+    color: #866000;
+  }
+
+  :global(.check[data-state="error"] strong) {
+    background: #fde8e8;
+    color: var(--color-danger);
+  }
+
+  @media (max-width: 860px) {
+    .status-shell,
+    .panel-head {
+      grid-template-columns: 1fr;
+    }
+
+    .panel-head {
+      display: grid;
+    }
+  }
+</style>

@@ -145,11 +145,11 @@ const { active = 'home' } = Astro.props;
 
     if (isLoggedIn) {
       const summary = user
-        ? { avatar_url: user.avatar_url || '', initials: getInitials(user), is_admin: Boolean(user.is_admin) }
+        ? { avatar_url: user.avatar_url || '', initials: getInitials(user), can_access_backoffice: Boolean(user.can_access_backoffice) }
         : readCachedSummary();
 
       renderAvatar(summary);
-      if (adminLink) adminLink.hidden = !summary?.is_admin;
+      if (adminLink) adminLink.hidden = !summary?.can_access_backoffice;
     } else if (adminLink) {
       adminLink.hidden = true;
     }
@@ -162,7 +162,7 @@ const { active = 'home' } = Astro.props;
           localStorage.setItem(userSummaryKey, JSON.stringify({
             avatar_url: user.avatar_url || '',
             initials: getInitials(user),
-            is_admin: Boolean(user.is_admin),
+            can_access_backoffice: Boolean(user.can_access_backoffice),
           }));
         }
       } else {

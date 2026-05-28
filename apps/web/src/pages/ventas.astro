@@ -3,6 +3,7 @@ import BackButton from '../components/BackButton.astro';
 import ModuleDisabled from '../components/ModuleDisabled.astro';
 import SiteHeader from '../components/SiteHeader.astro';
 import { siteConfig } from '../config/site';
+import { tcgApi } from '../lib/tcg-api';
 import BaseLayout from '../layouts/BaseLayout.astro';
 ---
 
@@ -11,7 +12,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
   {
     siteConfig.features.shop ? (
-      <main class="sales-view">
+      <main class="sales-view" id="backoffice-page" hidden>
         <section class="page-shell sales-shell">
           <div>
             <BackButton fallback="/admin" />
@@ -59,6 +60,21 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       />
     )
   }
+
+  <script define:vars={{ meUrl: tcgApi.me }}>
+    const page = document.querySelector('#backoffice-page');
+
+    fetch(meUrl, { credentials: 'include' })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Debes iniciar sesion.');
+        const payload = await response.json();
+        if (!payload.data?.can_access_backoffice) throw new Error('Sin permisos.');
+        if (page) page.hidden = false;
+      })
+      .catch(() => {
+        window.location.assign('/login');
+      });
+  </script>
 </BaseLayout>
 
 <style>
