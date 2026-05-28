@@ -1,4 +1,5 @@
 # Application
+.initialized
 web/app/plugins/*
 !web/app/plugins/.gitkeep
 # Ignore Composer-installed mu-plugin directories; single-file mu-plugins are tracked intentionally

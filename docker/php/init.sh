@@ -20,22 +20,29 @@ done
 
 echo "DB ready"
 
-if [ ! -f ".initialized" ]; then
-  echo "Bootstrapping environment..."
+echo "Checking WordPress installation..."
 
-  if ! php -r 'require "/var/www/html/web/wp-config.php"; global $table_prefix; mysqli_report(MYSQLI_REPORT_OFF); $db = @mysqli_connect(DB_HOST, DB_USER, DB_PASSWORD, DB_NAME); $table = $db ? mysqli_real_escape_string($db, $table_prefix . "options") : ""; $result = $db ? mysqli_query($db, "SHOW TABLES LIKE \"" . $table . "\"") : false; exit($result && mysqli_num_rows($result) > 0 ? 0 : 1);'; then
-    wp core install \
-      --url="${WP_HOME:-http://localhost:8080}" \
-      --title="${WP_TITLE:-TCG Market}" \
-      --admin_user="${WP_ADMIN_USER:-admin}" \
-      --admin_password="${WP_ADMIN_PASSWORD:-admin}" \
-      --admin_email="${WP_ADMIN_EMAIL:-admin@test.com}" \
-      --skip-email \
-      --allow-root
-  fi
-
-  touch .initialized
+if ! wp core is-installed --allow-root; then
+  echo "WordPress is not installed. Installing WordPress..."
+  wp core install \
+    --url="${WP_HOME:-http://localhost:8080}" \
+    --title="${WP_TITLE:-TCG Market}" \
+    --admin_user="${WP_ADMIN_USER:-admin}" \
+    --admin_password="${WP_ADMIN_PASSWORD:-admin}" \
+    --admin_email="${WP_ADMIN_EMAIL:-admin@test.com}" \
+    --skip-email \
+    --allow-root
 fi
+
+echo "Configuring WordPress defaults..."
+wp rewrite structure '/%postname%/' --allow-root
+wp rewrite flush --allow-root
+
+wp plugin activate redis-cache --allow-root || true
+wp plugin activate woocommerce --allow-root || true
+wp plugin activate advanced-custom-fields --allow-root || true
+
+touch .initialized
 
 echo "Init completed"
 
