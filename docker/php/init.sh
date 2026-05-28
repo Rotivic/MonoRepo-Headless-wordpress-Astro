@@ -51,6 +51,18 @@ wp plugin activate advanced-custom-fields --allow-root || true
 wp plugin activate fluentform --allow-root || true
 wp language plugin install --all "${WORDPRESS_LOCALE}" --allow-root || true
 
+echo "Configuring WooCommerce..."
+# Crear páginas de tienda (shop, carrito, checkout, mi cuenta) si no existen
+wp wc tool run install_pages --user="${WP_ADMIN_USER:-admin}" --allow-root || true
+# Moneda y país por defecto
+wp option update woocommerce_currency EUR --allow-root
+wp option update woocommerce_default_country ES --allow-root
+# Desactivar modo "coming soon" de WooCommerce 8+ (bloquea el frontend de tienda)
+wp option update woocommerce_coming_soon no --allow-root || true
+# Marcar onboarding como completado para evitar redirects al wizard
+wp option update woocommerce_task_list_complete yes --allow-root || true
+wp option update woocommerce_onboarding_profile '{"completed":true,"skipped":true}' --format=json --allow-root || true
+
 if [ "${WP_DEMO_SEED:-true}" != "false" ] && [ -f "scripts/seed-demo-all.php" ]; then
   echo "Seeding demo content..."
   wp eval-file scripts/seed-demo-all.php --allow-root || true
