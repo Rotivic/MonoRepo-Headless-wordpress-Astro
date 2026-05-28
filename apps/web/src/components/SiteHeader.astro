@@ -132,6 +132,12 @@ const { active = 'home' } = Astro.props;
     try { return JSON.parse(localStorage.getItem(userSummaryKey) || 'null'); } catch { return null; }
   };
 
+  const csrfHeaders = () => {
+    const csrf = document.cookie.split('; ').find((row) => row.startsWith('tcg_platform_csrf='))?.split('=')[1];
+    if (!csrf) return {};
+    return { 'X-TCG-CSRF': decodeURIComponent(csrf).split(':')[0] };
+  };
+
   const setLoggedIn = (isLoggedIn, user) => {
     navActions?.setAttribute('data-auth-state', isLoggedIn ? 'user' : 'guest');
     guestItems.forEach((el) => { el.hidden = isLoggedIn; });
@@ -198,7 +204,7 @@ const { active = 'home' } = Astro.props;
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDropdown(); });
 
   logoutButton?.addEventListener('click', async () => {
-    try { await fetch(logoutUrl, { method: 'POST', credentials: 'include' }); } catch {}
+    try { await fetch(logoutUrl, { method: 'POST', credentials: 'include', headers: csrfHeaders() }); } catch {}
     setLoggedIn(false, null);
     window.location.assign('/login');
   });

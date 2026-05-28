@@ -694,6 +694,7 @@ Esto permite reiniciar contenedores sin perder la base de datos ni reinstalar pa
 - Astro vive montado desde el host, por lo que los cambios en `apps/web/src` se reflejan en el navegador.
 - Flutter vive en `apps/mobile`. El SDK local se usa para ejecutar en emulador/dispositivo; Docker queda como tooling opcional.
 - `npm audit` puede mostrar vulnerabilidades moderadas en dependencias del frontend. No bloquea el entorno local, pero conviene revisarlo antes de produccion.
+- La guia de hardening y reglas para nuevas rutas vive en `SECURITY.md`.
 
 ## Estado actual
 

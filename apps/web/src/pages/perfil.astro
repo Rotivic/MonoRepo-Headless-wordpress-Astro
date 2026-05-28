@@ -79,7 +79,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             <section class="security-panel">
               <div>
                 <h3>Cambiar contrasena</h3>
-                <p>Al cambiarla se cerraran el resto de sesiones activas.</p>
+                <p>Minimo 12 caracteres, con mayusculas, minusculas y numeros. Al cambiarla se cerraran el resto de sesiones activas.</p>
               </div>
               <form class="stack-form" id="password-form">
                 <div class="field">
@@ -160,6 +160,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
   <script>
     import QRCode from 'qrcode';
+    import { csrfHeaders } from '../lib/security';
     import { tcgApi } from '../lib/tcg-api';
 
     const meUrl = tcgApi.me;
@@ -199,7 +200,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const apiJson = async (url, options = {}) => {
       const response = await fetch(url, {
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+        headers: csrfHeaders({ 'Content-Type': 'application/json', ...(options.headers || {}) }),
         ...options,
       });
       const data = await response.json().catch(() => ({}));
@@ -403,7 +404,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     logoutButton?.addEventListener('click', async () => {
       setStatus(profileStatus, 'Cerrando sesion...');
       try {
-        await fetch(logoutUrl, { method: 'POST', credentials: 'include' });
+        await fetch(logoutUrl, { method: 'POST', credentials: 'include', headers: csrfHeaders() });
       } finally {
         window.localStorage.removeItem('tcg.authenticated');
         window.localStorage.removeItem('tcg.user.summary');
