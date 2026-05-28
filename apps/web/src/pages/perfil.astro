@@ -1,0 +1,671 @@
+---
+import SiteHeader from '../components/SiteHeader.astro';
+import { tcgApi } from '../lib/tcg-api';
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="Perfil | TCG Platform">
+  <SiteHeader active="perfil" />
+
+  <main class="profile-view">
+    <section class="page-shell profile-grid">
+      <aside class="profile-sidebar">
+        <p class="eyebrow">Area privada</p>
+        <h1>Mi perfil</h1>
+        <p>Centro base de cuenta para datos personales, seguridad, doble factor y sesiones activas.</p>
+      </aside>
+
+      <section class="profile-panel" aria-live="polite">
+        <div id="loading-state" class="state">Cargando sesion...</div>
+
+        <div id="empty-state" class="state hidden">
+          <h2>No hay sesion activa</h2>
+          <p>Inicia sesion para consultar y gestionar tu cuenta.</p>
+          <a class="button button-primary" href="/login">Entrar</a>
+        </div>
+
+        <div id="profile-state" class="hidden">
+          <div class="account-row">
+            <div class="avatar" id="avatar"></div>
+            <div>
+              <h2 id="display-name">Usuario</h2>
+              <p id="email"></p>
+            </div>
+          </div>
+
+          <div class="tabs" role="tablist" aria-label="Secciones de perfil">
+            <button class="tab active" type="button" data-tab="overview">Resumen</button>
+            <button class="tab" type="button" data-tab="details">Datos</button>
+            <button class="tab" type="button" data-tab="security">Seguridad</button>
+            <button class="tab" type="button" data-tab="sessions">Sesiones</button>
+          </div>
+
+          <section class="tab-panel" id="tab-overview">
+            <dl class="data-list">
+              <div><dt>ID WordPress</dt><dd id="user-id">-</dd></div>
+              <div><dt>Estado</dt><dd id="enabled">-</dd></div>
+              <div><dt>Verificado</dt><dd id="verified">-</dd></div>
+              <div><dt>Creado</dt><dd id="created">-</dd></div>
+              <div><dt>Doble factor</dt><dd id="two-factor-state">-</dd></div>
+            </dl>
+            <div class="next-actions" aria-label="Modulos futuros">
+              <a href="/wishlist">Wishlist</a>
+              <a href="/mis-pedidos">Mis pedidos</a>
+              <a href="/ventas">Ventas</a>
+              <a href="/inventario">Inventario</a>
+            </div>
+          </section>
+
+          <section class="tab-panel hidden" id="tab-details">
+            <form class="stack-form" id="profile-form">
+              <div class="field">
+                <label for="first-name">Nombre</label>
+                <input id="first-name" name="first_name" type="text" autocomplete="given-name" />
+              </div>
+              <div class="field">
+                <label for="last-name">Apellidos</label>
+                <input id="last-name" name="last_name" type="text" autocomplete="family-name" />
+              </div>
+              <div class="field">
+                <label for="display-name-input">Nombre visible</label>
+                <input id="display-name-input" name="display_name" type="text" autocomplete="name" />
+              </div>
+              <p class="status-message" id="profile-form-status" aria-live="polite"></p>
+              <button class="button button-primary" type="submit">Guardar datos</button>
+            </form>
+          </section>
+
+          <section class="tab-panel hidden" id="tab-security">
+            <section class="security-panel">
+              <div>
+                <h3>Cambiar contrasena</h3>
+                <p>Al cambiarla se cerraran el resto de sesiones activas.</p>
+              </div>
+              <form class="stack-form" id="password-form">
+                <div class="field">
+                  <label for="current-password">Contrasena actual</label>
+                  <input id="current-password" name="current_password" type="password" autocomplete="current-password" required />
+                </div>
+                <div class="field">
+                  <label for="new-password">Nueva contrasena</label>
+                  <input id="new-password" name="password" type="password" autocomplete="new-password" minlength="12" required />
+                </div>
+                <div class="field">
+                  <label for="new-password-confirmation">Repetir contrasena</label>
+                  <input id="new-password-confirmation" name="password_confirmation" type="password" autocomplete="new-password" minlength="12" required />
+                </div>
+                <p class="status-message" id="password-status" aria-live="polite"></p>
+                <button class="button button-primary" type="submit">Cambiar contrasena</button>
+              </form>
+            </section>
+
+            <section class="security-panel">
+              <div>
+                <h3>Doble factor</h3>
+                <p>Usa una app autenticadora compatible con TOTP para reforzar el inicio de sesion.</p>
+              </div>
+
+              <div id="two-factor-disabled" class="two-factor-box hidden">
+                <button class="button button-primary" id="two-factor-setup" type="button">Configurar 2FA</button>
+              </div>
+
+              <form id="two-factor-enable-form" class="two-factor-box hidden">
+                <p>Escanea el QR o guarda el secreto manualmente.</p>
+                <canvas id="two-factor-qr" width="180" height="180" aria-label="QR de configuracion 2FA"></canvas>
+                <code id="two-factor-secret"></code>
+                <a id="two-factor-uri" href="#" rel="noreferrer">Abrir enlace otpauth</a>
+                <div class="field">
+                  <label for="two-factor-enable-code">Codigo</label>
+                  <input id="two-factor-enable-code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" minlength="6" maxlength="12" required />
+                </div>
+                <button class="button button-primary" type="submit">Activar 2FA</button>
+              </form>
+
+              <form id="two-factor-disable-form" class="two-factor-box hidden">
+                <p>Introduce un codigo actual o un codigo de recuperacion.</p>
+                <div class="field">
+                  <label for="two-factor-disable-code">Codigo</label>
+                  <input id="two-factor-disable-code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" minlength="6" maxlength="12" required />
+                </div>
+                <button class="button button-secondary" type="submit">Desactivar 2FA</button>
+              </form>
+
+              <div id="recovery-codes-box" class="two-factor-box hidden">
+                <p>Guarda estos codigos de recuperacion ahora. Solo se muestran una vez.</p>
+                <ul id="recovery-codes"></ul>
+              </div>
+
+              <p class="status-message" id="two-factor-status" aria-live="polite"></p>
+            </section>
+          </section>
+
+          <section class="tab-panel hidden" id="tab-sessions">
+            <div class="sessions-head">
+              <div>
+                <h3>Sesiones activas</h3>
+                <p>Revisa dispositivos y cierra accesos que no reconozcas.</p>
+              </div>
+              <button class="button button-secondary" id="refresh-sessions" type="button">Actualizar</button>
+            </div>
+            <div class="sessions-list" id="sessions-list"></div>
+            <p class="status-message" id="sessions-status" aria-live="polite"></p>
+          </section>
+
+          <p class="status-message" id="profile-status"></p>
+          <button class="button button-secondary" id="logout-button" type="button">Cerrar sesion</button>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script>
+    import QRCode from 'qrcode';
+    import { tcgApi } from '../lib/tcg-api';
+
+    const meUrl = tcgApi.me;
+    const passwordUrl = tcgApi.password;
+    const sessionsUrl = tcgApi.sessions;
+    const logoutUrl = tcgApi.logout;
+    const twoFactorSetupUrl = tcgApi.twoFactorSetup;
+    const twoFactorEnableUrl = tcgApi.twoFactorEnable;
+    const twoFactorDisableUrl = tcgApi.twoFactorDisable;
+
+    const loadingState = document.querySelector('#loading-state');
+    const emptyState = document.querySelector('#empty-state');
+    const profileState = document.querySelector('#profile-state');
+    const profileStatus = document.querySelector('#profile-status');
+    const logoutButton = document.querySelector('#logout-button');
+    const profileForm = document.querySelector('#profile-form');
+    const profileFormStatus = document.querySelector('#profile-form-status');
+    const passwordForm = document.querySelector('#password-form');
+    const passwordStatus = document.querySelector('#password-status');
+    const sessionsList = document.querySelector('#sessions-list');
+    const sessionsStatus = document.querySelector('#sessions-status');
+    const refreshSessions = document.querySelector('#refresh-sessions');
+    const twoFactorState = document.querySelector('#two-factor-state');
+    const twoFactorDisabled = document.querySelector('#two-factor-disabled');
+    const twoFactorEnableForm = document.querySelector('#two-factor-enable-form');
+    const twoFactorDisableForm = document.querySelector('#two-factor-disable-form');
+    const twoFactorSetup = document.querySelector('#two-factor-setup');
+    const twoFactorSecret = document.querySelector('#two-factor-secret');
+    const twoFactorUri = document.querySelector('#two-factor-uri');
+    const twoFactorQr = document.querySelector('#two-factor-qr');
+    const recoveryCodesBox = document.querySelector('#recovery-codes-box');
+    const recoveryCodes = document.querySelector('#recovery-codes');
+    const twoFactorStatus = document.querySelector('#two-factor-status');
+
+    let currentUser = null;
+
+    const apiJson = async (url, options = {}) => {
+      const response = await fetch(url, {
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+        ...options,
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || 'No se pudo completar la accion.');
+      return data;
+    };
+
+    const setStatus = (el, message, state = '') => {
+      if (!el) return;
+      el.dataset.state = state;
+      el.textContent = message;
+    };
+
+    const setTwoFactorUi = (enabled) => {
+      if (twoFactorState) twoFactorState.textContent = enabled ? 'Activo' : 'Inactivo';
+      twoFactorDisabled?.classList.toggle('hidden', enabled);
+      twoFactorDisableForm?.classList.toggle('hidden', !enabled);
+      twoFactorEnableForm?.classList.add('hidden');
+    };
+
+    const setTab = (name) => {
+      document.querySelectorAll('.tab').forEach((tab) => tab.classList.toggle('active', tab.dataset.tab === name));
+      document.querySelectorAll('.tab-panel').forEach((panel) => panel.classList.toggle('hidden', panel.id !== `tab-${name}`));
+      if (name === 'sessions') loadSessions();
+    };
+
+    document.querySelectorAll('.tab').forEach((tab) => {
+      tab.addEventListener('click', () => setTab(tab.dataset.tab));
+    });
+
+    const showEmpty = () => {
+      loadingState?.classList.add('hidden');
+      profileState?.classList.add('hidden');
+      emptyState?.classList.remove('hidden');
+    };
+
+    const renderAvatar = (user) => {
+      const avatarEl = document.querySelector('#avatar');
+      const name = [user.first_name, user.last_name].filter(Boolean).join(' ') || user.email || 'Usuario';
+      if (!avatarEl) return;
+      avatarEl.innerHTML = user.avatar_url
+        ? `<img src="${user.avatar_url}" alt="${name}" width="56" height="56">`
+        : `<span>${name.slice(0, 1).toUpperCase()}</span>`;
+    };
+
+    const showProfile = (user) => {
+      currentUser = user;
+      const name = [user.first_name, user.last_name].filter(Boolean).join(' ') || user.display_name || user.email || 'Usuario';
+      document.querySelector('#display-name').textContent = name;
+      document.querySelector('#email').textContent = user.email || '';
+      document.querySelector('#user-id').textContent = String(user.id ?? '-');
+      document.querySelector('#enabled').textContent = user.enabled ? 'Activo' : 'Inactivo';
+      document.querySelector('#verified').textContent = user.is_verified ? 'Si' : 'Pendiente';
+      document.querySelector('#created').textContent = user.created_at || '-';
+      document.querySelector('#first-name').value = user.first_name || '';
+      document.querySelector('#last-name').value = user.last_name || '';
+      document.querySelector('#display-name-input').value = user.display_name || name;
+      setTwoFactorUi(Boolean(user.two_factor_enabled));
+      renderAvatar(user);
+      loadingState?.classList.add('hidden');
+      emptyState?.classList.add('hidden');
+      profileState?.classList.remove('hidden');
+    };
+
+    const loadProfile = async () => {
+      try {
+        const data = await apiJson(meUrl);
+        showProfile(data.data);
+      } catch {
+        showEmpty();
+      }
+    };
+
+    const loadSessions = async () => {
+      setStatus(sessionsStatus, 'Cargando sesiones...');
+      try {
+        const data = await apiJson(sessionsUrl);
+        sessionsList.innerHTML = data.data.map((session) => `
+          <article class="session-item">
+            <div>
+              <h4>${session.device_name || 'Dispositivo'}</h4>
+              <p>${session.current ? 'Sesion actual' : 'Otra sesion'} · Ultimo uso ${session.last_used_at || session.created_at}</p>
+            </div>
+            <button class="button button-secondary revoke-session" type="button" data-id="${session.id}">
+              ${session.current ? 'Cerrar esta' : 'Cerrar'}
+            </button>
+          </article>
+        `).join('');
+        setStatus(sessionsStatus, data.data.length ? '' : 'No hay sesiones activas.', '');
+      } catch (error) {
+        setStatus(sessionsStatus, error.message, 'error');
+      }
+    };
+
+    profileForm?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      setStatus(profileFormStatus, 'Guardando datos...');
+      try {
+        const data = await apiJson(meUrl, {
+          method: 'POST',
+          body: JSON.stringify(Object.fromEntries(new FormData(profileForm))),
+        });
+        showProfile(data.data);
+        setStatus(profileFormStatus, 'Datos actualizados.', 'success');
+      } catch (error) {
+        setStatus(profileFormStatus, error.message, 'error');
+      }
+    });
+
+    passwordForm?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      setStatus(passwordStatus, 'Actualizando contrasena...');
+      try {
+        await apiJson(passwordUrl, {
+          method: 'POST',
+          body: JSON.stringify(Object.fromEntries(new FormData(passwordForm))),
+        });
+        passwordForm.reset();
+        setStatus(passwordStatus, 'Contrasena actualizada. Otras sesiones se han cerrado.', 'success');
+      } catch (error) {
+        setStatus(passwordStatus, error.message, 'error');
+      }
+    });
+
+    sessionsList?.addEventListener('click', async (event) => {
+      const button = event.target.closest('.revoke-session');
+      if (!button) return;
+      setStatus(sessionsStatus, 'Cerrando sesion...');
+      try {
+        const data = await apiJson(`${sessionsUrl}/${button.dataset.id}`, { method: 'DELETE' });
+        if (data.current_revoked) {
+          window.localStorage.removeItem('tcg.authenticated');
+          window.localStorage.removeItem('tcg.user.summary');
+          window.location.assign('/login');
+          return;
+        }
+        await loadSessions();
+        setStatus(sessionsStatus, 'Sesion cerrada.', 'success');
+      } catch (error) {
+        setStatus(sessionsStatus, error.message, 'error');
+      }
+    });
+
+    refreshSessions?.addEventListener('click', loadSessions);
+
+    twoFactorSetup?.addEventListener('click', async () => {
+      setStatus(twoFactorStatus, 'Generando configuracion...');
+      try {
+        const data = await apiJson(twoFactorSetupUrl, { method: 'POST' });
+        twoFactorSecret.textContent = data.secret;
+        twoFactorUri.href = data.otpauth_uri;
+        if (twoFactorQr instanceof HTMLCanvasElement) {
+          QRCode.toCanvas(twoFactorQr, data.otpauth_uri, {
+            width: 180,
+            margin: 1,
+            color: { dark: '#0a0b0d', light: '#ffffff' },
+          });
+        }
+        twoFactorDisabled?.classList.add('hidden');
+        twoFactorEnableForm?.classList.remove('hidden');
+        setStatus(twoFactorStatus, 'Secreto generado. Confirmalo con tu app autenticadora.', 'success');
+      } catch (error) {
+        setStatus(twoFactorStatus, error.message, 'error');
+      }
+    });
+
+    twoFactorEnableForm?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      setStatus(twoFactorStatus, 'Activando 2FA...');
+      try {
+        const data = await apiJson(twoFactorEnableUrl, {
+          method: 'POST',
+          body: JSON.stringify({ code: new FormData(twoFactorEnableForm).get('code') }),
+        });
+        showProfile(data.data);
+        if (Array.isArray(data.recovery_codes) && recoveryCodes) {
+          recoveryCodes.innerHTML = data.recovery_codes.map((code) => `<li><code>${code}</code></li>`).join('');
+          recoveryCodesBox?.classList.remove('hidden');
+        }
+        setStatus(twoFactorStatus, 'Doble factor activado.', 'success');
+      } catch (error) {
+        setStatus(twoFactorStatus, error.message, 'error');
+      }
+    });
+
+    twoFactorDisableForm?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      setStatus(twoFactorStatus, 'Desactivando 2FA...');
+      try {
+        const data = await apiJson(twoFactorDisableUrl, {
+          method: 'POST',
+          body: JSON.stringify({ code: new FormData(twoFactorDisableForm).get('code') }),
+        });
+        showProfile(data.data);
+        setStatus(twoFactorStatus, 'Doble factor desactivado.', 'success');
+      } catch (error) {
+        setStatus(twoFactorStatus, error.message, 'error');
+      }
+    });
+
+    logoutButton?.addEventListener('click', async () => {
+      setStatus(profileStatus, 'Cerrando sesion...');
+      try {
+        await fetch(logoutUrl, { method: 'POST', credentials: 'include' });
+      } finally {
+        window.localStorage.removeItem('tcg.authenticated');
+        window.localStorage.removeItem('tcg.user.summary');
+        window.location.assign('/login');
+      }
+    });
+
+    loadProfile();
+  </script>
+</BaseLayout>
+
+<style>
+  .profile-view {
+    min-height: calc(100vh - 65px);
+    padding: 56px 0;
+    background: var(--color-surface-soft);
+  }
+
+  .profile-grid {
+    display: grid;
+    grid-template-columns: minmax(240px, 0.75fr) minmax(0, 1.25fr);
+    gap: 32px;
+    align-items: start;
+  }
+
+  .profile-sidebar {
+    position: sticky;
+    top: 88px;
+  }
+
+  .eyebrow {
+    margin: 0 0 12px;
+    color: var(--color-primary);
+    font-size: 0.82rem;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: clamp(2.4rem, 6vw, 4rem);
+    font-weight: 400;
+    line-height: 1;
+  }
+
+  .profile-sidebar p {
+    color: var(--color-body);
+    line-height: 1.7;
+  }
+
+  .profile-panel {
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-panel);
+    background: var(--color-canvas);
+    padding: 28px;
+  }
+
+  .hidden,
+  [hidden] {
+    display: none !important;
+  }
+
+  .state h2,
+  .account-row h2 {
+    margin: 0;
+    font-size: 1.4rem;
+  }
+
+  .state p {
+    color: var(--color-body);
+    line-height: 1.6;
+  }
+
+  .account-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .avatar {
+    display: grid;
+    width: 56px;
+    height: 56px;
+    place-items: center;
+    overflow: hidden;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: #e0e5e8;
+    color: #8a9aa3;
+    font-size: 1.2rem;
+    font-weight: 800;
+  }
+
+  .avatar :global(img) {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 24px 0;
+    border-bottom: 1px solid var(--color-hairline);
+    padding-bottom: 12px;
+  }
+
+  .tab {
+    min-height: 38px;
+    border: 0;
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--color-body);
+    padding: 0 14px;
+    font-weight: 800;
+  }
+
+  .tab.active {
+    background: var(--color-surface-strong);
+    color: var(--color-ink);
+  }
+
+  .data-list {
+    display: grid;
+    gap: 1px;
+    overflow: hidden;
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-item);
+    background: var(--color-hairline);
+  }
+
+  .data-list div {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    gap: 16px;
+    background: var(--color-canvas);
+    padding: 14px;
+  }
+
+  dt {
+    color: var(--color-muted);
+    font-size: 0.86rem;
+  }
+
+  dd {
+    margin: 0;
+    font-weight: 700;
+  }
+
+  .stack-form,
+  .security-panel,
+  .two-factor-box {
+    display: grid;
+    gap: 14px;
+  }
+
+  .security-panel {
+    margin-bottom: 18px;
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-item);
+    background: var(--color-surface-soft);
+    padding: 18px;
+  }
+
+  .security-panel h3,
+  .sessions-head h3 {
+    margin: 0;
+    font-size: 1.05rem;
+  }
+
+  .security-panel p,
+  .sessions-head p,
+  .session-item p {
+    margin: 6px 0 0;
+    color: var(--color-body);
+    line-height: 1.5;
+  }
+
+  #two-factor-qr {
+    width: 180px;
+    height: 180px;
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-item);
+    background: var(--color-canvas);
+    padding: 8px;
+  }
+
+  .two-factor-box code,
+  #recovery-codes code {
+    display: block;
+    overflow-wrap: anywhere;
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-item);
+    background: var(--color-canvas);
+    padding: 12px;
+    font-size: 0.9rem;
+    font-weight: 700;
+  }
+
+  #recovery-codes {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .sessions-head {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+
+  .sessions-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .session-item {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 14px;
+    align-items: center;
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-item);
+    padding: 14px;
+  }
+
+  .session-item h4 {
+    margin: 0;
+  }
+
+  .next-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 22px;
+  }
+
+  .next-actions span,
+  .next-actions a {
+    border-radius: var(--radius-pill);
+    background: var(--color-surface-strong);
+    padding: 7px 12px;
+    color: var(--color-ink);
+    font-size: 0.86rem;
+    font-weight: 700;
+  }
+
+  @media (max-width: 860px) {
+    .profile-grid,
+    .data-list div,
+    .session-item {
+      grid-template-columns: 1fr;
+    }
+
+    .profile-sidebar {
+      position: static;
+    }
+  }
+</style>

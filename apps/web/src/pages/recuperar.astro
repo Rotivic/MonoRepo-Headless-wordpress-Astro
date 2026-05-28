@@ -1,0 +1,128 @@
+---
+import AuthLayout from '../components/AuthLayout.astro';
+import SiteHeader from '../components/SiteHeader.astro';
+import { tcgApi } from '../lib/tcg-api';
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="Recuperar contrasena | TCG Platform">
+  <SiteHeader active="login" />
+  <AuthLayout
+    eyebrow="Cuenta"
+    title="Recupera el acceso."
+    summary="El flujo usa Mailpit en local y los endpoints propios del backend WordPress."
+  >
+    <form class="auth-form" id="request-form">
+      <div class="form-head">
+        <h2>Solicitar enlace</h2>
+        <p>Recibiras un enlace temporal para cambiar la contrasena.</p>
+      </div>
+      <div class="field">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="email" required />
+      </div>
+      <p class="status-message" id="request-status" aria-live="polite"></p>
+      <button class="button button-primary" type="submit">Enviar enlace</button>
+    </form>
+
+    <form class="auth-form hidden" id="reset-form">
+      <div class="form-head">
+        <h2>Nueva contrasena</h2>
+        <p>La contrasena debe tener al menos 12 caracteres.</p>
+      </div>
+      <div class="field">
+        <label for="password">Nueva contrasena</label>
+        <input id="password" name="password" type="password" autocomplete="new-password" minlength="12" required />
+      </div>
+      <div class="field">
+        <label for="password_confirmation">Repetir contrasena</label>
+        <input id="password_confirmation" name="password_confirmation" type="password" autocomplete="new-password" minlength="12" required />
+      </div>
+      <p class="status-message" id="reset-status" aria-live="polite"></p>
+      <button class="button button-primary" type="submit">Cambiar contrasena</button>
+    </form>
+  </AuthLayout>
+
+  <script define:vars={{ forgotUrl: tcgApi.forgotPassword, resetUrl: tcgApi.resetPassword }}>
+    const params = new URLSearchParams(window.location.search);
+    const email = params.get('email') || '';
+    const token = params.get('token') || '';
+    const requestForm = document.querySelector('#request-form');
+    const resetForm = document.querySelector('#reset-form');
+    const requestStatus = document.querySelector('#request-status');
+    const resetStatus = document.querySelector('#reset-status');
+
+    if (email && token) {
+      requestForm?.classList.add('hidden');
+      resetForm?.classList.remove('hidden');
+    }
+
+    requestForm?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      requestStatus.textContent = 'Enviando enlace...';
+      requestStatus.dataset.state = '';
+
+      try {
+        const response = await fetch(forgotUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(Object.fromEntries(new FormData(requestForm))),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || 'No se pudo enviar el enlace.');
+        requestStatus.dataset.state = 'success';
+        requestStatus.textContent = 'Si el email existe, recibiras instrucciones.';
+      } catch (error) {
+        requestStatus.dataset.state = 'error';
+        requestStatus.textContent = error instanceof Error ? error.message : 'No se pudo enviar el enlace.';
+      }
+    });
+
+    resetForm?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      resetStatus.textContent = 'Cambiando contrasena...';
+      resetStatus.dataset.state = '';
+
+      const payload = Object.fromEntries(new FormData(resetForm));
+      payload.email = email;
+      payload.token = token;
+
+      try {
+        const response = await fetch(resetUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || 'No se pudo cambiar la contrasena.');
+        resetStatus.dataset.state = 'success';
+        resetStatus.textContent = 'Contrasena actualizada. Ya puedes iniciar sesion.';
+      } catch (error) {
+        resetStatus.dataset.state = 'error';
+        resetStatus.textContent = error instanceof Error ? error.message : 'No se pudo cambiar la contrasena.';
+      }
+    });
+  </script>
+</BaseLayout>
+
+<style>
+  .auth-form {
+    display: grid;
+    gap: 18px;
+  }
+
+  .hidden {
+    display: none;
+  }
+
+  .form-head h2 {
+    margin: 0;
+    font-size: 1.55rem;
+  }
+
+  .form-head p {
+    margin: 8px 0 0;
+    color: var(--color-body);
+    line-height: 1.5;
+  }
+</style>

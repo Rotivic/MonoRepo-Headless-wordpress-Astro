@@ -1,0 +1,156 @@
+---
+import SiteHeader from '../components/SiteHeader.astro';
+import Pagination from '../components/Pagination.astro';
+import { siteConfig } from '../config/site';
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title={`Wishlist | ${siteConfig.name}`}>
+  <SiteHeader active="home" />
+  <main class="list-view">
+    <section class="page-shell list-shell">
+      <div>
+        <p class="eyebrow">Cuenta</p>
+        <h1>Wishlist</h1>
+        <p class="lede">Base visual local para favoritos. El siguiente paso seria persistirla en WordPress para compartir web y mobile.</p>
+      </div>
+      <section class="list-panel">
+        <div id="wishlist-items" class="items"></div>
+        <div id="wishlist-empty" class="empty">
+          <h2>No hay favoritos</h2>
+          <p>Anade productos desde la tienda para probar esta vista.</p>
+          <a class="button button-primary" href="/tienda">Ir a tienda</a>
+        </div>
+        <Pagination id="wishlist-pagination" label="Paginacion de wishlist" />
+      </section>
+    </section>
+  </main>
+
+  <script>
+    import { setupLocalPagination } from '../lib/pagination';
+    import { readWishlist, writeWishlist } from '../lib/wishlist';
+
+    const root = document.querySelector('#wishlist-items');
+    const empty = document.querySelector('#wishlist-empty');
+    const pager = setupLocalPagination({
+      root: document,
+      itemSelector: '.wishlist-page-item',
+      pagination: document.querySelector('#wishlist-pagination'),
+      perPage: 6,
+      empty,
+    });
+
+    const render = () => {
+      const items = readWishlist();
+      empty.hidden = items.length > 0;
+      root.innerHTML = items.map((item) => `
+        <article class="item wishlist-page-item">
+          ${item.image ? `<img src="${item.image}" alt="">` : `<span>${item.name.slice(0, 1).toUpperCase()}</span>`}
+          <div><h2>${item.name}</h2><p>${item.price || ''}</p></div>
+          <a class="button button-secondary" href="/producto?slug=${item.slug}">Ver</a>
+          <button class="button button-text remove" type="button" data-id="${item.id}">Quitar</button>
+        </article>
+      `).join('');
+
+      root.querySelectorAll('.remove').forEach((button) => {
+        button.addEventListener('click', () => {
+          writeWishlist(readWishlist().filter((item) => item.id !== Number(button.dataset.id)));
+          render();
+        });
+      });
+
+      pager.refresh();
+    };
+
+    render();
+  </script>
+</BaseLayout>
+
+<style>
+  .list-view {
+    min-height: calc(100vh - 65px);
+    padding: 56px 0;
+    background: var(--color-surface-soft);
+  }
+
+  .list-shell {
+    display: grid;
+    grid-template-columns: minmax(0, 0.85fr) minmax(360px, 1.15fr);
+    gap: 40px;
+  }
+
+  .eyebrow {
+    margin: 0 0 12px;
+    color: var(--color-primary);
+    font-size: 0.82rem;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: clamp(2.6rem, 7vw, 5rem);
+    line-height: 1;
+  }
+
+  .lede,
+  .empty p,
+  .item p {
+    color: var(--color-body);
+    line-height: 1.6;
+  }
+
+  .list-panel {
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-item);
+    background: var(--color-canvas);
+    padding: 22px;
+  }
+
+  .items {
+    display: grid;
+    gap: 12px;
+  }
+
+  .item {
+    display: grid;
+    grid-template-columns: 64px 1fr auto auto;
+    gap: 12px;
+    align-items: center;
+    border-bottom: 1px solid var(--color-hairline);
+    padding-bottom: 12px;
+  }
+
+  .item img,
+  .item span {
+    display: grid;
+    width: 64px;
+    height: 64px;
+    place-items: center;
+    border-radius: var(--radius-item);
+    background: var(--color-surface-strong);
+    color: var(--color-primary);
+    font-weight: 800;
+    object-fit: cover;
+  }
+
+  .item h2 {
+    margin: 0;
+    font-size: 1rem;
+  }
+
+  .item p {
+    margin: 4px 0 0;
+  }
+
+  [hidden] {
+    display: none;
+  }
+
+  @media (max-width: 860px) {
+    .list-shell,
+    .item {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

@@ -1,0 +1,21 @@
+import { siteConfig } from '../config/site';
+
+export const tcgApi = {
+  health: `${siteConfig.apiUrl}/tcg/v1/health`,
+  login: `${siteConfig.apiUrl}/tcg/v1/login`,
+  register: `${siteConfig.apiUrl}/tcg/v1/register`,
+  me: `${siteConfig.apiUrl}/tcg/v1/me`,
+  password: `${siteConfig.apiUrl}/tcg/v1/me/password`,
+  forgotPassword: `${siteConfig.apiUrl}/tcg/v1/password/forgot`,
+  resetPassword: `${siteConfig.apiUrl}/tcg/v1/password/reset`,
+  verifyEmail: `${siteConfig.apiUrl}/tcg/v1/email/verify`,
+  resendEmailVerification: `${siteConfig.apiUrl}/tcg/v1/email/resend`,
+  sessions: `${siteConfig.apiUrl}/tcg/v1/sessions`,
+  session: (id: number | string) => `${siteConfig.apiUrl}/tcg/v1/sessions/${id}`,
+  logout: `${siteConfig.apiUrl}/tcg/v1/logout`,
+  twoFactorSetup: `${siteConfig.apiUrl}/tcg/v1/2fa/setup`,
+  twoFactorEnable: `${siteConfig.apiUrl}/tcg/v1/2fa/enable`,
+  twoFactorDisable: `${siteConfig.apiUrl}/tcg/v1/2fa/disable`,
+  twoFactorVerify: `${siteConfig.apiUrl}/tcg/v1/2fa/verify`,
+  adminUsers: `${siteConfig.apiUrl}/tcg/v1/admin/users`,
+};

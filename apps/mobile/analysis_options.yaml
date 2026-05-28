@@ -1,0 +1,29 @@
+include: package:very_good_analysis/analysis_options.yaml
+analyzer:
+  exclude:
+    - lib/l10n/gen/*
+    - lib/**/*.g.dart
+  errors:
+    depend_on_referenced_packages: ignore
+    deprecated_member_use: ignore
+linter:
+  rules:
+    always_put_required_named_parameters_first: false
+    always_use_package_imports: false
+    avoid_catches_without_on_clauses: false
+    avoid_redundant_argument_values: false
+    cascade_invocations: false
+    curly_braces_in_flow_control_structures: false
+    discarded_futures: false
+    lines_longer_than_80_chars: false
+    noop_primitive_operations: false
+    omit_local_variable_types: false
+    prefer_if_elements_to_conditional_expressions: false
+    public_member_api_docs: false
+    sort_constructors_first: false
+    sort_pub_dependencies: false
+    unnecessary_null_checks: false
+    unnecessary_raw_strings: false
+    unawaited_futures: false
+    use_colored_box: false
+    use_null_aware_elements: false

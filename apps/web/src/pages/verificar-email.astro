@@ -1,0 +1,60 @@
+---
+import AuthLayout from '../components/AuthLayout.astro';
+import SiteHeader from '../components/SiteHeader.astro';
+import { tcgApi } from '../lib/tcg-api';
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="Verificar email | TCG Platform">
+  <SiteHeader active="login" />
+  <AuthLayout
+    eyebrow="Cuenta"
+    title="Verificacion de email."
+    summary="Confirma el email del usuario para habilitar flujos futuros de cuenta y compra."
+  >
+    <div class="verify-box">
+      <h2>Estado</h2>
+      <p class="status-message" id="verify-status" aria-live="polite">Verificando enlace...</p>
+      <a class="button button-primary" href="/perfil">Ir a mi perfil</a>
+    </div>
+  </AuthLayout>
+
+  <script define:vars={{ verifyUrl: tcgApi.verifyEmail }}>
+    const status = document.querySelector('#verify-status');
+    const params = new URLSearchParams(window.location.search);
+
+    const verify = async () => {
+      try {
+        const response = await fetch(verifyUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: params.get('email'),
+            token: params.get('token'),
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || 'No se pudo verificar el email.');
+        status.dataset.state = 'success';
+        status.textContent = 'Email verificado correctamente.';
+      } catch (error) {
+        status.dataset.state = 'error';
+        status.textContent = error instanceof Error ? error.message : 'No se pudo verificar el email.';
+      }
+    };
+
+    verify();
+  </script>
+</BaseLayout>
+
+<style>
+  .verify-box {
+    display: grid;
+    gap: 18px;
+  }
+
+  .verify-box h2 {
+    margin: 0;
+    font-size: 1.55rem;
+  }
+</style>

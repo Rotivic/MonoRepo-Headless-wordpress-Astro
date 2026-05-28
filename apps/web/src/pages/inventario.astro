@@ -1,0 +1,150 @@
+---
+import BackButton from '../components/BackButton.astro';
+import ModuleDisabled from '../components/ModuleDisabled.astro';
+import SiteHeader from '../components/SiteHeader.astro';
+import Pagination from '../components/Pagination.astro';
+import { siteConfig } from '../config/site';
+import { formatStorePrice, shopApiInternal, type StoreProduct } from '../lib/shop';
+import BaseLayout from '../layouts/BaseLayout.astro';
+
+let products: StoreProduct[] = [];
+let error = '';
+
+if (siteConfig.features.shop) {
+  try {
+    const response = await fetch(`${shopApiInternal.products}?per_page=50`);
+    if (!response.ok) throw new Error(`WooCommerce respondio con ${response.status}`);
+    products = await response.json();
+  } catch (caught) {
+    error = caught instanceof Error ? caught.message : 'No se pudo cargar el inventario.';
+  }
+}
+---
+
+<BaseLayout title={`Inventario | ${siteConfig.name}`}>
+  <SiteHeader active="tienda" />
+
+  {
+    siteConfig.features.shop ? (
+      <main class="inventory-view">
+        <section class="page-shell inventory-shell">
+          <div>
+            <BackButton fallback="/admin" />
+            <p class="eyebrow">Catalogo</p>
+            <h1>Inventario</h1>
+            <p class="lede">Vista de lectura para revisar productos desde el frontend. La edicion de stock, precios y fichas debe seguir en WooCommerce.</p>
+          </div>
+
+          <section class="inventory-panel">
+            {error && <p class="notice">{error}</p>}
+            {!error && products.length === 0 && <p class="notice">No hay productos para mostrar.</p>}
+            {!error && products.length > 0 && (
+              <div class="table">
+                {products.map((product) => (
+                  <article class="row inventory-page-item">
+                    <div>
+                      <strong>{product.name}</strong>
+                      <span>{product.slug}</span>
+                    </div>
+                    <span>{formatStorePrice(product.prices)}</span>
+                    <span>{product.is_in_stock ? 'Disponible' : 'Sin stock'}</span>
+                  </article>
+                ))}
+              </div>
+              <Pagination id="inventory-pagination" label="Paginacion de inventario" />
+            )}
+          </section>
+        </section>
+      </main>
+    ) : (
+      <ModuleDisabled
+        title="Inventario desactivado"
+        summary="El inventario forma parte del modulo tienda. Puedes ocultarlo con PUBLIC_ENABLE_SHOP=false."
+      />
+    )
+  }
+
+  <script>
+    import { setupLocalPagination } from '../lib/pagination';
+
+    setupLocalPagination({
+      root: document,
+      itemSelector: '.inventory-page-item',
+      pagination: document.querySelector('#inventory-pagination'),
+      perPage: 10,
+    });
+  </script>
+</BaseLayout>
+
+<style>
+  .inventory-view {
+    min-height: calc(100vh - 65px);
+    padding: 56px 0;
+    background: var(--color-surface-soft);
+  }
+
+  .inventory-shell {
+    display: grid;
+    grid-template-columns: minmax(0, 0.85fr) minmax(440px, 1.15fr);
+    gap: 40px;
+    align-items: start;
+  }
+
+  .eyebrow {
+    margin: 0 0 12px;
+    color: var(--color-primary);
+    font-size: 0.82rem;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: clamp(2.6rem, 7vw, 5rem);
+    line-height: 1;
+  }
+
+  .lede,
+  .notice,
+  .row span {
+    color: var(--color-body);
+    line-height: 1.7;
+  }
+
+  .inventory-panel {
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-item);
+    background: var(--color-canvas);
+    padding: 22px;
+  }
+
+  .table {
+    display: grid;
+    gap: 1px;
+    overflow: hidden;
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-item);
+    background: var(--color-hairline);
+  }
+
+  .row {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 16px;
+    align-items: center;
+    background: var(--color-canvas);
+    padding: 14px;
+  }
+
+  .row div {
+    display: grid;
+    gap: 4px;
+  }
+
+  @media (max-width: 860px) {
+    .inventory-shell,
+    .row {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

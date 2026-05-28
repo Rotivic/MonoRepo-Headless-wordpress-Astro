@@ -1,0 +1,201 @@
+{
+  "@@locale": "es",
+
+  "loginHeaderTitle": "Bienvenido/a",
+  "@loginHeaderTitle": { "description": "TÃ­tulo pequeÃ±o sobre el mensaje de login" },
+
+  "loginHeaderSubtitle": "Inicia sesiÃ³n para continuar",
+  "@loginHeaderSubtitle": { "description": "Mensaje principal en login" },
+
+  "loginEmailLabel": "Email",
+  "@loginEmailLabel": { "description": "Etiqueta del campo email" },
+
+  "loginPasswordLabel": "ContraseÃ±a",
+  "@loginPasswordLabel": { "description": "Etiqueta del campo contraseÃ±a" },
+
+  "loginForgotPassword": "Â¿Olvidaste tu contraseÃ±a?",
+  "@loginForgotPassword": { "description": "Texto del enlace de recuperar contraseÃ±a" },
+
+  "loginSignInCta": "Entrar",
+  "@loginSignInCta": { "description": "Texto del botÃ³n principal de login" },
+
+  "loginCreateNewAccount": "Crear nueva cuenta",
+  "@loginCreateNewAccount": { "description": "Texto bajo el botÃ³n de login" },
+
+  "loginOrContinueWith": "O continÃºa con",
+  "@loginOrContinueWith": { "description": "Texto separador encima de botones sociales" },
+
+  "loginShowPassword": "Mostrar contraseÃ±a",
+  "@loginShowPassword": { "description": "Tooltip para mostrar contraseÃ±a" },
+
+  "loginHidePassword": "Ocultar contraseÃ±a",
+  "@loginHidePassword": { "description": "Tooltip para ocultar contraseÃ±a" },
+
+  "validationEmailEmpty": "Escribe tu email",
+  "@validationEmailEmpty": { "description": "Error cuando el email estÃ¡ vacÃ­o" },
+
+  "validationEmailInvalid": "El email no es vÃ¡lido",
+  "@validationEmailInvalid": { "description": "Error cuando el email no es vÃ¡lido" },
+
+  "validationPasswordEmpty": "Escribe tu contraseÃ±a",
+  "@validationPasswordEmpty": { "description": "Error cuando la contraseÃ±a estÃ¡ vacÃ­a" },
+
+  "validationPasswordMin": "Debe tener al menos {min} caracteres",
+  "@validationPasswordMin": {
+    "description": "Error cuando la contraseÃ±a es demasiado corta",
+    "placeholders": { "min": { "type": "int" } }
+  },
+
+  "registerTitle": "Registro",
+  "registerSubtitle": "Crea una cuenta para empezar",
+  "registerFirstNameLabel": "Nombre",
+  "registerLastNameLabel": "Apellidos",
+  "registerUsernameLabel": "Nombre de usuario",
+  "registerEmailLabel": "Email",
+  "registerPasswordLabel": "ContraseÃ±a",
+  "registerPasswordAgainLabel": "Repetir contraseÃ±a",
+  "registerPhoneLabel": "TelÃ©fono",
+  "registerSubmitCta": "Registrarse",
+  "registerAlreadyHaveAccount": "Â¿Ya tienes una cuenta? Inicia sesiÃ³n",
+
+  "validationFieldEmpty": "Este campo no puede estar vacÃ­o",
+  "validationPasswordComplexity": "La contraseÃ±a debe tener al menos 12 caracteres, una mayÃºscula, una minÃºscula y un carÃ¡cter especial",
+  "validationPasswordsNotMatch": "Las contraseÃ±as no coinciden",
+
+  "verifyEmailTitle": "Verifica tu email",
+  "verifyEmailSubtitle": "Te hemos enviado un enlace de verificaciÃ³n. Revisa tu bandeja de entrada (y spam).",
+  "verifyEmailLabel": "Email: {email}",
+  "@verifyEmailLabel": {
+    "placeholders": { "email": { "type": "String" } }
+  },
+  "verifyEmailResendCta": "Reenviar email",
+  "verifyEmailConfirmedCta": "Ya lo he verificado",
+  "verifyEmailGoBack": "Ir al login",
+  "verifyEmailLogout": "Salir",
+
+  "twoFactorTitle": "VerificaciÃ³n en dos pasos",
+  "twoFactorSubtitle": "Introduce el cÃ³digo de tu app autenticadora o un cÃ³digo de recuperaciÃ³n.",
+  "twoFactorAppCodeTab": "CÃ³digo app",
+  "twoFactorRecoveryCodeTab": "CÃ³digo recuperaciÃ³n",
+  "twoFactorAppCodeLabel": "CÃ³digo de 6 dÃ­gitos",
+  "twoFactorRecoveryCodeLabel": "CÃ³digo de recuperaciÃ³n",
+  "twoFactorSubmitCta": "Continuar",
+  "twoFactorBackToLogin": "Volver al login",
+
+  "counterAppBarTitle": "Contador",
+  "@counterAppBarTitle": { "description": "Texto mostrado en la AppBar de la pÃ¡gina del contador" },
+
+  "tabHome": "Inicio",
+  "tabMap": "Mapa",
+  "tabCheckins": "Jornadas",
+  "tabSettings": "Ajustes",
+  "tabProfile": "Perfil",
+  "tabDocuments": "Documentos",
+
+  "checkinTitle": "Jornadas",
+  "checkinEmpty": "No hay registros",
+  "checkinNoPatient": "Sin paciente",
+  "commonRetry": "Reintentar",
+  "commonBack": "Volver",
+
+  "checkinEntry": "Entrada: {value}",
+  "@checkinEntry": {
+    "placeholders": { "value": { "type": "String" } }
+  },
+
+  "checkinExit": "Salida: {value}",
+  "@checkinExit": {
+    "placeholders": { "value": { "type": "String" } }
+  },
+
+  "recoverPasswordTitle": "Recuperar contraseÃ±a",
+  "recoverPasswordGetCodeMsg": "Introduce tu email para recibir un enlace de recuperaciÃ³n",
+  "recoverPasswordGetCodeCta": "Solicitar recuperaciÃ³n",
+  "recoverPasswordCodeLabel": "CÃ³digo de verificaciÃ³n",
+  "recoverPasswordNewLabel": "Nueva contraseÃ±a",
+  "recoverPasswordRepeatLabel": "Repetir contraseÃ±a",
+  "recoverPasswordSubmit": "Restablecer contraseÃ±a",
+  "recoverPasswordCodeEmpty": "Introduce el cÃ³digo",
+  "recoverPasswordMatchError": "Las contraseÃ±as no coinciden",
+
+  "documentsTitle": "Documentos",
+  "documentsEmpty": "No hay documentos",
+  "documentsDownload": "Descargar",
+  "documentsSign": "Firmar",
+  "documentsSigned": "Firmado",
+  "documentsNotSigned": "Pendiente de firma",
+  "documentsSignTitle": "Firmar documento",
+  "documentsSignDescription": "Dibuja tu firma a continuaciÃ³n",
+  "documentsSignClear": "Limpiar",
+  "documentsSignSubmit": "Enviar firma",
+
+  "passwordRequirementLength": "MÃ­nimo 12 caracteres",
+  "passwordRequirementLowercase": "Una minÃºscula",
+  "passwordRequirementUppercase": "Una mayÃºscula",
+  "passwordRequirementSpecial": "Un carÃ¡cter especial",
+  "passwordStrengthWeak": "DÃ©bil",
+  "passwordStrengthMedium": "Media",
+  "passwordStrengthGood": "Buena",
+  "passwordStrengthStrong": "Segura",
+
+  "profileAccountInfo": "InformaciÃ³n de la cuenta",
+  "profileEmployeeId": "ID: {id}",
+  "@profileEmployeeId": {
+    "placeholders": { "id": { "type": "String" } }
+  },
+  "profileSectionPersonal": "InformaciÃ³n personal",
+  "profileSectionSecurity": "Seguridad",
+  "profileSectionAccount": "Cuenta",
+  "profileSectionPreferences": "Preferencias",
+  "profileLabelFirstName": "Nombre",
+  "profileLabelLastName": "Apellidos",
+  "profileLabelEmail": "Email",
+  "profileLabel2FA": "2FA",
+  "profileLabelStatus": "Estado cuenta",
+  "profileLabelPassword": "ContraseÃ±a",
+  "profileLabelCreated": "Creado",
+  "profileLabelLanguage": "Idioma",
+  "profileLabelTheme": "Tema",
+  "profileValueVerified": "Verificado",
+  "profileValuePending": "Pendiente",
+  "profileValueEnabled": "Habilitada",
+  "profileValueDisabled": "Deshabilitada",
+  "profileValueActivated": "Activado",
+  "profileValueDeactivated": "Desactivado",
+  "profileActionChangePassword": "Cambiar contraseÃ±a",
+  "profileLogoutCta": "Cerrar sesiÃ³n",
+  "profilePhotoSheetTitle": "Cambiar foto de perfil",
+  "profilePhotoSheetCamera": "Hacer foto",
+  "profilePhotoSheetGallery": "Elegir de la galerÃ­a",
+
+  "themeSheetTitle": "Tema",
+  "themeSystem": "Sistema",
+  "themeLight": "Claro",
+  "themeDark": "Oscuro",
+
+  "languageSheetTitle": "Idioma",
+  "languageSpanish": "EspaÃ±ol",
+  "languageEnglish": "English",
+
+  "editProfileTitle": "Editar perfil",
+  "updateProfileCta": "Actualizar perfil",
+
+  "changePasswordTitle": "Cambiar contraseÃ±a",
+  "changePasswordCurrentLabel": "ContraseÃ±a actual",
+  "changePasswordNewLabel": "Nueva contraseÃ±a",
+  "changePasswordConfirmLabel": "Confirmar nueva contraseÃ±a",
+  "changePasswordMatchError": "Las contraseÃ±as no coinciden",
+  "changePasswordSubmitCta": "Actualizar contraseÃ±a",
+
+  "homeWelcome": "Bienvenido",
+  "homeWelcomeNamed": "Bienvenido, {name}",
+  "@homeWelcomeNamed": {
+    "placeholders": { "name": { "type": "String" } }
+  },
+  "homeBuildFun": "Â¡Construyamos algo divertido!",
+  "homeTabTitle": "INICIO",
+  "homeCopyright": "Copyright Â© {year}. TCG Platform Mobile. Todos los derechos reservados.",
+  "@homeCopyright": {
+    "placeholders": { "year": { "type": "int" } }
+  }
+}

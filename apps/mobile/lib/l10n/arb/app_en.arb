@@ -1,0 +1,200 @@
+{
+  "@@locale": "en",
+
+  "loginHeaderTitle": "Welcome",
+  "@loginHeaderTitle": { "description": "Small title shown above the login message" },
+
+  "loginHeaderSubtitle": "Sign in to continue",
+  "@loginHeaderSubtitle": { "description": "Main message on the login screen" },
+
+  "loginEmailLabel": "Email",
+  "@loginEmailLabel": { "description": "Email field label" },
+
+  "loginPasswordLabel": "Password",
+  "@loginPasswordLabel": { "description": "Password field label" },
+
+  "loginForgotPassword": "Forgot your password?",
+  "@loginForgotPassword": { "description": "Forgot password link text" },
+
+  "loginSignInCta": "Sign in",
+  "@loginSignInCta": { "description": "Primary login button text" },
+
+  "loginCreateNewAccount": "Create new account",
+  "@loginCreateNewAccount": { "description": "Text under the login button" },
+
+  "loginOrContinueWith": "Or continue with",
+  "@loginOrContinueWith": { "description": "Separator text above social login buttons" },
+
+  "loginShowPassword": "Show password",
+  "@loginShowPassword": { "description": "Tooltip to show password" },
+
+  "loginHidePassword": "Hide password",
+  "@loginHidePassword": { "description": "Tooltip to hide password" },
+
+  "validationEmailEmpty": "Write your email",
+  "@validationEmailEmpty": { "description": "Validation error when email is empty" },
+
+  "validationEmailInvalid": "The email is not valid",
+  "@validationEmailInvalid": { "description": "Validation error when email is invalid" },
+
+  "validationPasswordEmpty": "Write your password",
+  "@validationPasswordEmpty": { "description": "Validation error when password is empty" },
+
+  "validationPasswordMin": "Must be at least {min} characters",
+  "@validationPasswordMin": {
+    "description": "Validation error when password is too short",
+    "placeholders": { "min": { "type": "int" } }
+  },
+
+  "registerTitle": "Register",
+  "registerSubtitle": "Create an account to get started",
+  "registerFirstNameLabel": "First Name",
+  "registerLastNameLabel": "Last Name",
+  "registerUsernameLabel": "Username",
+  "registerEmailLabel": "Email",
+  "registerPasswordLabel": "Password",
+  "registerPasswordAgainLabel": "Repeat Password",
+  "registerPhoneLabel": "Phone",
+  "registerSubmitCta": "Sign Up",
+  "registerAlreadyHaveAccount": "Already have an account? Sign in",
+
+  "validationFieldEmpty": "This field cannot be empty",
+  "validationPasswordComplexity": "Password must be at least 12 characters, with one uppercase, one lowercase and one special character",
+  "validationPasswordsNotMatch": "Passwords do not match",
+
+  "verifyEmailTitle": "Verify your email",
+  "verifyEmailSubtitle": "We have sent you a verification link. Please check your inbox (and spam).",
+  "verifyEmailLabel": "Email: {email}",
+  "@verifyEmailLabel": {
+    "placeholders": { "email": { "type": "String" } }
+  },
+  "verifyEmailResendCta": "Resend email",
+  "verifyEmailConfirmedCta": "I have already verified it",
+  "verifyEmailGoBack": "Go to login",
+  "verifyEmailLogout": "Logout",
+
+  "twoFactorTitle": "Two-factor verification",
+  "twoFactorSubtitle": "Enter the code from your authenticator app or a recovery code.",
+  "twoFactorAppCodeTab": "App code",
+  "twoFactorRecoveryCodeTab": "Recovery code",
+  "twoFactorAppCodeLabel": "6-digit code",
+  "twoFactorRecoveryCodeLabel": "Recovery code",
+  "twoFactorSubmitCta": "Continue",
+  "twoFactorBackToLogin": "Back to login",
+
+  "counterAppBarTitle": "Counter",
+  "@counterAppBarTitle": { "description": "Text shown in the AppBar of the Counter Page" },
+
+  "tabHome": "Home",
+  "tabDocuments": "Documents",
+  "tabCheckins": "Shifts",
+  "tabSettings": "Settings",
+  "tabProfile": "Profile",
+
+  "checkinTitle": "Shifts",
+  "checkinEmpty": "No records",
+  "checkinNoPatient": "No patient",
+  "commonRetry": "Retry",
+  "commonBack": "Back",
+
+  "checkinEntry": "Check-in: {value}",
+  "@checkinEntry": {
+    "placeholders": { "value": { "type": "String" } }
+  },
+
+  "checkinExit": "Check-out: {value}",
+  "@checkinExit": {
+    "placeholders": { "value": { "type": "String" } }
+  },
+
+  "recoverPasswordTitle": "Recover password",
+  "recoverPasswordGetCodeMsg": "Enter your email to receive a recovery link",
+  "recoverPasswordGetCodeCta": "Request recovery",
+  "recoverPasswordCodeLabel": "Verification code",
+  "recoverPasswordNewLabel": "New password",
+  "recoverPasswordRepeatLabel": "Repeat password",
+  "recoverPasswordSubmit": "Reset password",
+  "recoverPasswordCodeEmpty": "Enter the code",
+  "recoverPasswordMatchError": "Passwords do not match",
+
+  "documentsTitle": "Documents",
+  "documentsEmpty": "No documents",
+  "documentsDownload": "Download",
+  "documentsSign": "Sign",
+  "documentsSigned": "Signed",
+  "documentsNotSigned": "Awaiting signature",
+  "documentsSignTitle": "Sign document",
+  "documentsSignDescription": "Draw your signature below",
+  "documentsSignClear": "Clear",
+  "documentsSignSubmit": "Submit signature",
+
+  "passwordRequirementLength": "Minimum 12 characters",
+  "passwordRequirementLowercase": "One lowercase letter",
+  "passwordRequirementUppercase": "One uppercase letter",
+  "passwordRequirementSpecial": "One special character",
+  "passwordStrengthWeak": "Weak",
+  "passwordStrengthMedium": "Medium",
+  "passwordStrengthGood": "Good",
+  "passwordStrengthStrong": "Secure",
+
+  "profileAccountInfo": "Account information",
+  "profileEmployeeId": "ID: {id}",
+  "@profileEmployeeId": {
+    "placeholders": { "id": { "type": "String" } }
+  },
+  "profileSectionPersonal": "Personal information",
+  "profileSectionSecurity": "Security",
+  "profileSectionAccount": "Account",
+  "profileSectionPreferences": "Preferences",
+  "profileLabelFirstName": "First Name",
+  "profileLabelLastName": "Last Name",
+  "profileLabelEmail": "Email",
+  "profileLabel2FA": "2FA",
+  "profileLabelStatus": "Account status",
+  "profileLabelPassword": "Password",
+  "profileLabelCreated": "Created",
+  "profileLabelLanguage": "Language",
+  "profileLabelTheme": "Theme",
+  "profileValueVerified": "Verified",
+  "profileValuePending": "Pending",
+  "profileValueEnabled": "Enabled",
+  "profileValueDisabled": "Disabled",
+  "profileValueActivated": "Activated",
+  "profileValueDeactivated": "Deactivated",
+  "profileActionChangePassword": "Change password",
+  "profileLogoutCta": "Logout",
+  "profilePhotoSheetTitle": "Change profile photo",
+  "profilePhotoSheetCamera": "Take photo",
+  "profilePhotoSheetGallery": "Choose from gallery",
+
+  "themeSheetTitle": "Theme",
+  "themeSystem": "System",
+  "themeLight": "Light",
+  "themeDark": "Dark",
+
+  "languageSheetTitle": "Language",
+  "languageSpanish": "Spanish",
+  "languageEnglish": "English",
+
+  "editProfileTitle": "Edit profile",
+  "updateProfileCta": "Update profile",
+
+  "changePasswordTitle": "Change password",
+  "changePasswordCurrentLabel": "Current password",
+  "changePasswordNewLabel": "New password",
+  "changePasswordConfirmLabel": "Confirm new password",
+  "changePasswordMatchError": "Passwords do not match",
+  "changePasswordSubmitCta": "Update password",
+
+  "homeWelcome": "Welcome",
+  "homeWelcomeNamed": "Welcome, {name}",
+  "@homeWelcomeNamed": {
+    "placeholders": { "name": { "type": "String" } }
+  },
+  "homeBuildFun": "Let's build something fun!",
+  "homeTabTitle": "HOME",
+  "homeCopyright": "Copyright Â© {year}. TCG Platform Mobile. All rights reserved.",
+  "@homeCopyright": {
+    "placeholders": { "year": { "type": "int" } }
+  }
+}

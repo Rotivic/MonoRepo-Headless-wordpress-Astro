@@ -1,0 +1,82 @@
+---
+interface Props {
+  apiUrl: string;
+}
+
+const { apiUrl } = Astro.props;
+---
+
+<div class="panel" data-api-url={apiUrl}>
+  <div class="panel-header">
+    <span>TCG API</span>
+    <strong id="api-state">Comprobando</strong>
+  </div>
+  <code id="api-url">{apiUrl}</code>
+  <p id="api-message">Leyendo el endpoint ligero de salud del backend...</p>
+</div>
+
+<script>
+  const panel = document.querySelector('.panel');
+  const state = document.querySelector('#api-state');
+  const message = document.querySelector('#api-message');
+  const url = panel?.getAttribute('data-api-url');
+
+  if (url && state && message) {
+    fetch(url)
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        return response.json();
+      })
+      .then((data) => {
+        state.textContent = 'Online';
+        message.textContent = data?.namespace
+          ? `Backend activo: ${data.namespace}`
+          : 'Backend activo y respondiendo correctamente.';
+      })
+      .catch((error) => {
+        state.textContent = 'Offline';
+        message.textContent = `No se pudo conectar con el backend: ${error.message}`;
+      });
+  }
+</script>
+
+<style>
+  .panel {
+    border: 1px solid rgba(23, 32, 38, 0.12);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.72);
+    box-shadow: 0 18px 60px rgba(32, 40, 44, 0.08);
+    padding: 22px;
+  }
+
+  .panel-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+    color: #45545c;
+    font-size: 0.95rem;
+  }
+
+  .panel-header strong {
+    color: #1c5c4e;
+  }
+
+  code {
+    display: block;
+    overflow-wrap: anywhere;
+    border-radius: 6px;
+    background: #172026;
+    color: #f4efe1;
+    padding: 12px;
+    font-size: 0.9rem;
+  }
+
+  p {
+    margin: 16px 0 0;
+    color: #45545c;
+    line-height: 1.6;
+  }
+</style>

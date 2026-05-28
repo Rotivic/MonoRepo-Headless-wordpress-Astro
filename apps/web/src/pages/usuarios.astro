@@ -1,0 +1,234 @@
+---
+import BackButton from '../components/BackButton.astro';
+import SiteHeader from '../components/SiteHeader.astro';
+import Pagination from '../components/Pagination.astro';
+import { siteConfig } from '../config/site';
+import { tcgApi } from '../lib/tcg-api';
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title={`Usuarios | ${siteConfig.name}`}>
+  <SiteHeader active="perfil" />
+
+  <main class="users-view">
+    <section class="page-shell users-shell">
+      <div>
+        <BackButton fallback="/admin" />
+        <p class="eyebrow">Administracion</p>
+        <h1>Usuarios</h1>
+        <p class="lede">Listado frontend de consulta. La modificacion de usuarios se abre en WordPress para mantener permisos, validaciones y auditoria en el backend.</p>
+      </div>
+
+      <section class="users-panel">
+        <form class="search-row" id="users-search">
+          <div class="field">
+            <label for="search">Buscar</label>
+            <input id="search" name="search" type="search" autocomplete="off" placeholder="Email, nombre o usuario" />
+          </div>
+          <button class="button button-secondary" type="submit">Buscar</button>
+        </form>
+
+        <p class="status-message" id="users-status" aria-live="polite">Cargando usuarios...</p>
+        <div class="users-list" id="users-list"></div>
+        <Pagination id="users-pagination" label="Paginacion de usuarios" />
+      </section>
+    </section>
+  </main>
+
+  <script define:vars={{ usersUrl: tcgApi.adminUsers }}>
+    const form = document.querySelector('#users-search');
+    const list = document.querySelector('#users-list');
+    const status = document.querySelector('#users-status');
+    const pagination = document.querySelector('#users-pagination');
+    const prev = pagination?.querySelector('[data-pagination-prev]');
+    const next = pagination?.querySelector('[data-pagination-next]');
+    const paginationStatus = pagination?.querySelector('[data-pagination-status]');
+    const perPage = 5;
+    let currentPage = 1;
+    let currentSearch = '';
+
+    const setStatus = (message, state = '') => {
+      status.textContent = message;
+      status.dataset.state = state;
+    };
+
+    const updatePagination = (meta) => {
+      const totalPages = Number(meta?.total_pages || 1);
+      currentPage = Number(meta?.page || currentPage);
+      if (pagination) pagination.hidden = totalPages <= 1;
+      if (prev) prev.disabled = currentPage <= 1;
+      if (next) next.disabled = currentPage >= totalPages;
+      if (paginationStatus) paginationStatus.textContent = `Pagina ${currentPage} de ${totalPages}`;
+    };
+
+    const renderUsers = (users, meta) => {
+      if (!users.length) {
+        list.innerHTML = '';
+        setStatus('No hay usuarios para mostrar.');
+        updatePagination(meta);
+        return;
+      }
+
+      setStatus(`${meta?.total || users.length} usuario(s) encontrados.`, 'success');
+      list.innerHTML = users.map((user) => `
+        <article class="user-row">
+          <div class="avatar">${(user.display_name || user.email || 'U').slice(0, 1).toUpperCase()}</div>
+          <div class="main">
+            <strong>${user.display_name || user.email}</strong>
+            <span>${user.email}</span>
+          </div>
+          <span>${(user.roles || []).join(', ') || 'sin rol'}</span>
+          <span>${user.is_verified ? 'Verificado' : 'Pendiente'}</span>
+          <a class="button button-secondary" href="${user.edit_url}" target="_blank" rel="noreferrer">Editar</a>
+        </article>
+      `).join('');
+      updatePagination(meta);
+    };
+
+    const loadUsers = async (search = currentSearch, page = currentPage) => {
+      setStatus('Cargando usuarios...');
+      const url = new URL(usersUrl);
+      if (search) url.searchParams.set('search', search);
+      url.searchParams.set('page', String(page));
+      url.searchParams.set('per_page', String(perPage));
+
+      try {
+        const response = await fetch(url, { credentials: 'include' });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.message || 'No se pudieron cargar los usuarios.');
+        renderUsers(payload.data || [], payload.meta);
+      } catch (error) {
+        list.innerHTML = '';
+        if (pagination) pagination.hidden = true;
+        setStatus(error.message, 'error');
+      }
+    };
+
+    const searchInput = form?.querySelector('[name="search"]');
+    let debounceTimer;
+
+    const triggerSearch = (value) => {
+      currentSearch = value.trim();
+      currentPage = 1;
+      loadUsers(currentSearch, currentPage);
+    };
+
+    form?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      clearTimeout(debounceTimer);
+      triggerSearch(searchInput?.value || '');
+    });
+
+    searchInput?.addEventListener('input', () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => triggerSearch(searchInput.value || ''), 350);
+    });
+
+    prev?.addEventListener('click', () => {
+      currentPage = Math.max(1, currentPage - 1);
+      loadUsers(currentSearch, currentPage);
+    });
+
+    next?.addEventListener('click', () => {
+      currentPage += 1;
+      loadUsers(currentSearch, currentPage);
+    });
+
+    loadUsers();
+  </script>
+</BaseLayout>
+
+<style>
+  .users-view {
+    min-height: calc(100vh - 65px);
+    padding: 56px 0;
+    background: var(--color-surface-soft);
+  }
+
+  .users-shell {
+    display: grid;
+    grid-template-columns: minmax(0, 0.8fr) minmax(480px, 1.2fr);
+    gap: 40px;
+    align-items: start;
+  }
+
+  .eyebrow {
+    margin: 0 0 12px;
+    color: var(--color-primary);
+    font-size: 0.82rem;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: clamp(2.6rem, 7vw, 5rem);
+    line-height: 1;
+  }
+
+  .lede {
+    color: var(--color-body);
+    line-height: 1.7;
+  }
+
+  .users-panel {
+    display: grid;
+    gap: 16px;
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-item);
+    background: var(--color-canvas);
+    padding: 22px;
+  }
+
+  .search-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+    align-items: end;
+  }
+
+  .users-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  :global(.user-row) {
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr) auto auto auto;
+    gap: 12px;
+    align-items: center;
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-item);
+    padding: 12px;
+  }
+
+  :global(.user-row .avatar) {
+    display: grid;
+    width: 42px;
+    height: 42px;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--color-surface-strong);
+    color: var(--color-primary);
+    font-weight: 800;
+  }
+
+  :global(.user-row .main) {
+    display: grid;
+    min-width: 0;
+    gap: 3px;
+  }
+
+  :global(.user-row span) {
+    color: var(--color-body);
+    font-size: 0.9rem;
+  }
+
+  @media (max-width: 920px) {
+    .users-shell,
+    .search-row,
+    :global(.user-row) {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

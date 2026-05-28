@@ -1,0 +1,177 @@
+---
+import AuthLayout from '../components/AuthLayout.astro';
+import SiteHeader from '../components/SiteHeader.astro';
+import { tcgApi } from '../lib/tcg-api';
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="Entrar | TCG Platform">
+  <SiteHeader active="login" />
+  <AuthLayout
+    eyebrow="Cuenta TCG"
+    title="Accede al mismo backend que usa la app."
+    summary="Inicia sesion contra WordPress mediante la API segura de TCG Platform. La web usa una cookie HttpOnly y los tokens anteriores del mismo navegador se revocan al entrar de nuevo."
+  >
+    <form class="auth-form" id="login-form">
+      <div class="form-head">
+        <h2>Iniciar sesion</h2>
+        <p>Usa un usuario creado en WordPress o desde el registro web/mobile.</p>
+      </div>
+
+      <div class="field">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="email" required />
+      </div>
+
+      <div class="field">
+        <label for="password">Contrasena</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required />
+      </div>
+
+      <p class="status-message" id="login-status" aria-live="polite"></p>
+
+      <button class="button button-primary" type="submit">Entrar</button>
+      <a class="button button-secondary" href="/registro">Crear cuenta</a>
+    </form>
+
+    <form class="auth-form hidden" id="two-factor-form">
+      <div class="form-head">
+        <h2>Verificacion en dos pasos</h2>
+        <p>Introduce el codigo de 6 digitos de tu aplicacion autenticadora.</p>
+      </div>
+
+      <div class="field">
+        <label for="two-factor-code">Codigo</label>
+        <input id="two-factor-code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" minlength="6" maxlength="6" required />
+      </div>
+
+      <p class="status-message" id="two-factor-status" aria-live="polite"></p>
+      <button class="button button-primary" type="submit">Verificar</button>
+    </form>
+  </AuthLayout>
+
+  <script define:vars={{ loginUrl: tcgApi.login, twoFactorVerifyUrl: tcgApi.twoFactorVerify }}>
+    const form = document.querySelector('#login-form');
+    const status = document.querySelector('#login-status');
+    const twoFactorForm = document.querySelector('#two-factor-form');
+    const twoFactorStatus = document.querySelector('#two-factor-status');
+    let challengeToken = '';
+
+    const persistUserSummary = (user) => {
+      window.localStorage.setItem('tcg.authenticated', '1');
+      window.localStorage.setItem('tcg.user.summary', JSON.stringify({
+        avatar_url: user?.avatar_url || '',
+        initials: ([user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.email || 'U').slice(0, 1).toUpperCase(),
+      }));
+    };
+
+    form?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      status.dataset.state = '';
+      status.textContent = 'Validando credenciales...';
+
+      const formData = new FormData(form);
+      const payload = {
+        email: formData.get('email'),
+        password: formData.get('password'),
+        device_name: 'astro-web',
+      };
+
+      try {
+        const response = await fetch(loginUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(payload),
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.message || 'No se pudo iniciar sesion.');
+        }
+
+        if (data.two_factor && data.challenge_token) {
+          challengeToken = data.challenge_token;
+          status.dataset.state = 'success';
+          status.textContent = 'Verifica el segundo factor para completar el acceso.';
+          form.classList.add('hidden');
+          twoFactorForm?.classList.remove('hidden');
+          document.querySelector('#two-factor-code')?.focus();
+          return;
+        }
+
+        status.dataset.state = 'success';
+        status.textContent = 'Sesion iniciada. Redirigiendo...';
+        try {
+          persistUserSummary(data.data);
+        } catch {
+          // The HttpOnly cookie is the source of truth.
+        }
+        window.location.assign('/perfil');
+      } catch (error) {
+        status.dataset.state = 'error';
+        status.textContent = error instanceof Error ? error.message : 'No se pudo iniciar sesion.';
+      }
+    });
+
+    twoFactorForm?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      twoFactorStatus.dataset.state = '';
+      twoFactorStatus.textContent = 'Verificando codigo...';
+
+      const formData = new FormData(twoFactorForm);
+
+      try {
+        const response = await fetch(twoFactorVerifyUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            challenge_token: challengeToken,
+            code: formData.get('code'),
+          }),
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.message || 'No se pudo verificar el codigo.');
+        }
+
+        twoFactorStatus.dataset.state = 'success';
+        twoFactorStatus.textContent = 'Sesion iniciada. Redirigiendo...';
+        try {
+          persistUserSummary(data.data);
+        } catch {
+          // The HttpOnly cookie is the source of truth.
+        }
+        window.location.assign('/perfil');
+      } catch (error) {
+        twoFactorStatus.dataset.state = 'error';
+        twoFactorStatus.textContent = error instanceof Error ? error.message : 'No se pudo verificar el codigo.';
+      }
+    });
+  </script>
+</BaseLayout>
+
+<style>
+  .auth-form {
+    display: grid;
+    gap: 18px;
+  }
+
+  .hidden {
+    display: none;
+  }
+
+  .form-head h2 {
+    margin: 0;
+    font-size: 1.55rem;
+    font-weight: 600;
+  }
+
+  .form-head p {
+    margin: 8px 0 0;
+    color: var(--color-body);
+    line-height: 1.5;
+  }
+</style>

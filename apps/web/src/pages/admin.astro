@@ -1,0 +1,116 @@
+---
+import SiteHeader from '../components/SiteHeader.astro';
+import { siteConfig } from '../config/site';
+import { tcgApi } from '../lib/tcg-api';
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title={`Admin | ${siteConfig.name}`}>
+  <SiteHeader active="perfil" />
+
+  <main class="admin-view">
+    <section class="page-shell admin-shell">
+      <div>
+        <p class="eyebrow">Backoffice web</p>
+        <h1>Administracion</h1>
+        <p class="lede">Lanzadera segura para administradores. La edicion pesada sigue viviendo en WordPress; Astro puede mostrar lecturas o accesos rapidos.</p>
+      </div>
+
+      <section class="admin-panel" id="admin-panel" data-state="loading">
+        <p id="admin-status">Comprobando permisos...</p>
+        <div class="admin-grid" id="admin-grid" hidden>
+          <a href="http://localhost:8080/wp/wp-admin/">WordPress admin</a>
+          <a href="/usuarios">Listado de usuarios</a>
+          <a href="/inventario">Inventario</a>
+          <a href="/ventas">Ventas</a>
+          <a href="/mis-pedidos">Pedidos usuario</a>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script define:vars={{ meUrl: tcgApi.me }}>
+    const panel = document.querySelector('#admin-panel');
+    const status = document.querySelector('#admin-status');
+    const grid = document.querySelector('#admin-grid');
+
+    fetch(meUrl, { credentials: 'include' })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Debes iniciar sesion.');
+        const payload = await response.json();
+        if (!payload.data?.is_admin) throw new Error('Tu usuario no tiene permisos de administracion.');
+        panel.dataset.state = 'ready';
+        status.textContent = 'Accesos disponibles para administracion.';
+        grid.hidden = false;
+      })
+      .catch((error) => {
+        panel.dataset.state = 'error';
+        status.textContent = error.message;
+      });
+  </script>
+</BaseLayout>
+
+<style>
+  .admin-view {
+    min-height: calc(100vh - 65px);
+    padding: 56px 0;
+    background: var(--color-surface-soft);
+  }
+
+  .admin-shell {
+    display: grid;
+    grid-template-columns: minmax(0, 0.85fr) minmax(360px, 1.15fr);
+    gap: 40px;
+    align-items: start;
+  }
+
+  .eyebrow {
+    margin: 0 0 12px;
+    color: var(--color-primary);
+    font-size: 0.82rem;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: clamp(2.6rem, 7vw, 5rem);
+    line-height: 1;
+  }
+
+  .lede,
+  #admin-status {
+    color: var(--color-body);
+    line-height: 1.7;
+  }
+
+  .admin-panel {
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-item);
+    background: var(--color-canvas);
+    padding: 22px;
+  }
+
+  .admin-panel[data-state="error"] {
+    border-color: color-mix(in srgb, var(--color-danger), var(--color-hairline) 70%);
+  }
+
+  .admin-grid {
+    display: grid;
+    gap: 10px;
+    margin-top: 16px;
+  }
+
+  .admin-grid a {
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-item);
+    padding: 14px;
+    font-weight: 800;
+  }
+
+  @media (max-width: 860px) {
+    .admin-shell {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

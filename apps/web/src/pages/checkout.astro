@@ -1,0 +1,204 @@
+---
+import ModuleDisabled from '../components/ModuleDisabled.astro';
+import SiteHeader from '../components/SiteHeader.astro';
+import { siteConfig } from '../config/site';
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title={`Checkout | ${siteConfig.name}`}>
+  <SiteHeader active="carrito" />
+
+  {
+    siteConfig.features.shop ? (
+      <main class="checkout-view">
+        <section class="page-shell checkout-shell">
+          <div>
+            <p class="eyebrow">Checkout starter</p>
+            <h1>Finalizar compra</h1>
+            <p class="lede">
+              Flujo base sin pasarela real. Sirve para validar UI, carrito y navegacion antes de conectar WooCommerce checkout o un proveedor de pago.
+            </p>
+          </div>
+
+          <form class="checkout-panel" id="checkout-form">
+            <section class="block">
+              <h2>Datos de contacto</h2>
+              <div class="field">
+                <label for="email">Email</label>
+                <input id="email" name="email" type="email" autocomplete="email" required />
+              </div>
+              <div class="field">
+                <label for="name">Nombre completo</label>
+                <input id="name" name="name" type="text" autocomplete="name" required />
+              </div>
+            </section>
+
+            <section class="block">
+              <h2>Direccion</h2>
+              <div class="field">
+                <label for="address">Direccion</label>
+                <input id="address" name="address" type="text" autocomplete="street-address" required />
+              </div>
+              <div class="field-grid">
+                <div class="field">
+                  <label for="postal-code">Codigo postal</label>
+                  <input id="postal-code" name="postal_code" type="text" autocomplete="postal-code" required />
+                </div>
+                <div class="field">
+                  <label for="city">Ciudad</label>
+                  <input id="city" name="city" type="text" autocomplete="address-level2" required />
+                </div>
+              </div>
+            </section>
+
+            <section class="summary block">
+              <h2>Resumen</h2>
+              <div id="checkout-items"></div>
+              <p id="checkout-empty" class="muted">No hay productos en el carrito.</p>
+            </section>
+
+            <p class="status-message" id="checkout-status" aria-live="polite"></p>
+            <button class="button button-primary" id="checkout-submit" type="submit">Crear pedido demo</button>
+          </form>
+        </section>
+      </main>
+    ) : (
+      <ModuleDisabled
+        title="Checkout desactivado"
+        summary="El checkout forma parte del modulo tienda. Puedes ocultarlo con PUBLIC_ENABLE_SHOP=false."
+      />
+    )
+  }
+
+  <script is:inline>
+    const cartKey = 'tcg.cart.items';
+    const orderKey = 'tcg.last-order';
+    const itemsRoot = document.querySelector('#checkout-items');
+    const emptyRoot = document.querySelector('#checkout-empty');
+    const form = document.querySelector('#checkout-form');
+    const status = document.querySelector('#checkout-status');
+    const submit = document.querySelector('#checkout-submit');
+
+    const readCart = () => {
+      try { return JSON.parse(localStorage.getItem(cartKey) || '[]'); } catch { return []; }
+    };
+
+    const render = () => {
+      const items = readCart();
+      const hasItems = items.length > 0;
+      if (emptyRoot) emptyRoot.hidden = hasItems;
+      if (submit) submit.disabled = !hasItems;
+      if (!itemsRoot) return;
+
+      itemsRoot.innerHTML = items.map((item) => `
+        <article class="summary-item">
+          <strong>${item.name}</strong>
+          <span>${item.price} x ${item.quantity}</span>
+        </article>
+      `).join('');
+    };
+
+    form?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const items = readCart();
+      if (!items.length) {
+        if (status) status.textContent = 'Anade productos antes de continuar.';
+        return;
+      }
+
+      const order = {
+        id: 'TCG-' + Date.now().toString().slice(-8),
+        created_at: new Date().toISOString(),
+        items,
+        customer: Object.fromEntries(new FormData(form)),
+        status: 'demo',
+      };
+
+      localStorage.setItem(orderKey, JSON.stringify(order));
+      localStorage.removeItem(cartKey);
+      window.dispatchEvent(new CustomEvent('tcg:cart-updated'));
+      window.location.assign('/compra-realizada');
+    });
+
+    render();
+  </script>
+</BaseLayout>
+
+<style>
+  .checkout-view {
+    min-height: calc(100vh - 65px);
+    padding: 56px 0;
+    background: var(--color-surface-soft);
+  }
+
+  .checkout-shell {
+    display: grid;
+    grid-template-columns: minmax(0, 0.8fr) minmax(380px, 1.2fr);
+    gap: 40px;
+    align-items: start;
+  }
+
+  .eyebrow {
+    margin: 0 0 12px;
+    color: var(--color-primary);
+    font-size: 0.82rem;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: clamp(2.6rem, 7vw, 5rem);
+    line-height: 1;
+  }
+
+  .lede,
+  .muted {
+    color: var(--color-body);
+    line-height: 1.7;
+  }
+
+  .checkout-panel,
+  .block {
+    display: grid;
+    gap: 16px;
+  }
+
+  .checkout-panel {
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-item);
+    background: var(--color-canvas);
+    padding: 22px;
+  }
+
+  .block {
+    border-bottom: 1px solid var(--color-hairline);
+    padding-bottom: 18px;
+  }
+
+  .block h2 {
+    margin: 0;
+    font-size: 1.1rem;
+  }
+
+  .field-grid {
+    display: grid;
+    grid-template-columns: 0.7fr 1fr;
+    gap: 12px;
+  }
+
+  :global(.summary-item) {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    border-bottom: 1px solid var(--color-hairline);
+    padding: 10px 0;
+  }
+
+  @media (max-width: 860px) {
+    .checkout-shell,
+    .field-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

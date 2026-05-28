@@ -1,0 +1,107 @@
+# OS/editor noise
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*.tmp
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment/secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+apps/**/.env
+apps/**/.env.*
+!apps/**/.env.example
+!apps/**/.env.*.example
+apps/backend/auth.json
+
+# Docker/local runtime
+docker-compose.override.yml
+*.pid
+backups/
+
+# Node/Astro
+apps/web/node_modules/
+apps/web/.astro/
+apps/web/dist/
+
+# PHP/Bedrock/WordPress generated files
+apps/backend/vendor/
+apps/backend/web/wp/
+apps/backend/web/.htaccess
+apps/backend/web/app/plugins/*
+!apps/backend/web/app/plugins/.gitkeep
+apps/backend/web/app/upgrade/
+apps/backend/web/app/uploads/*
+!apps/backend/web/app/uploads/.gitkeep
+apps/backend/web/app/cache/
+apps/backend/web/app/themes/twentytwentyfive/
+
+# Composer-installed mu-plugin directories; single-file project mu-plugins can be tracked
+apps/backend/web/app/mu-plugins/*/
+!apps/backend/web/app/mu-plugins/tcg-api/
+
+# PHP tests/cache
+apps/backend/phpunit.xml
+apps/backend/.phpunit.result.cache
+apps/backend/.phpunit.cache/
+
+# WP-CLI local overrides
+apps/backend/wp-cli.local.yml
+
+# Flutter/Dart
+apps/mobile/.dart_tool/
+apps/mobile/.pub-cache/
+apps/mobile/.pub/
+apps/mobile/build/
+apps/mobile/.flutter-plugins
+apps/mobile/.flutter-plugins-dependencies
+apps/mobile/.packages
+apps/mobile/.fvm/
+apps/mobile/coverage/
+apps/mobile/flutter_*.png
+apps/mobile/app.*.symbols
+apps/mobile/app.*.map.json
+
+# Android local/generated
+apps/mobile/android/.gradle/
+apps/mobile/android/local.properties
+apps/mobile/android/key.properties
+apps/mobile/android/app/debug/
+apps/mobile/android/app/profile/
+apps/mobile/android/app/release/
+*.jks
+
+# iOS/macOS generated
+apps/mobile/ios/Pods/
+apps/mobile/ios/.symlinks/
+apps/mobile/ios/Flutter/Generated.xcconfig
+apps/mobile/ios/Flutter/flutter_export_environment.sh
+apps/mobile/ios/Flutter/ephemeral/
+apps/mobile/ios/Flutter/flutter_assets/
+apps/mobile/ios/Flutter/App.framework
+apps/mobile/ios/Flutter/Flutter.framework
+apps/mobile/ios/Runner/GeneratedPluginRegistrant.*
+apps/mobile/ios/**/xcuserdata/
+apps/mobile/ios/**/DerivedData/
+apps/mobile/macos/Flutter/GeneratedPluginRegistrant.swift
+apps/mobile/macos/Flutter/ephemeral/
+apps/mobile/macos/**/xcuserdata/
+apps/mobile/macos/**/DerivedData/
+
+# Windows/Linux desktop generated
+apps/mobile/windows/flutter/ephemeral/
+apps/mobile/linux/flutter/ephemeral/

@@ -1,0 +1,239 @@
+---
+import ModuleDisabled from '../components/ModuleDisabled.astro';
+import SiteHeader from '../components/SiteHeader.astro';
+import { siteConfig } from '../config/site';
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title={`Carrito | ${siteConfig.name}`}>
+  <SiteHeader active="carrito" />
+
+  {
+    siteConfig.features.shop ? (
+      <main class="cart-view">
+        <section class="page-shell cart-shell">
+          <div>
+            <p class="eyebrow">Carrito local</p>
+            <h1>Carrito</h1>
+            <p class="lede">
+              Base visual para carrito. De momento guarda una seleccion local; el siguiente paso seria conectarlo a WooCommerce Store API checkout.
+            </p>
+          </div>
+
+          <section class="cart-panel" aria-live="polite">
+            <div id="cart-items" class="cart-items"></div>
+            <div id="cart-empty" class="empty-cart" hidden>
+              <h2>Tu carrito esta vacio</h2>
+              <p>Anade productos desde la tienda para probar el flujo base.</p>
+              <a class="button button-primary" href="/tienda">Ir a tienda</a>
+            </div>
+            <div class="cart-actions" id="cart-actions" hidden>
+              <a class="button button-primary" href="/checkout">Continuar compra</a>
+              <button class="button button-secondary" id="clear-cart" type="button">Vaciar carrito</button>
+            </div>
+          </section>
+        </section>
+      </main>
+    ) : (
+      <ModuleDisabled
+        title="Carrito desactivado"
+        summary="El carrito forma parte del modulo tienda. Puedes ocultarlo con PUBLIC_ENABLE_SHOP=false."
+      />
+    )
+  }
+
+  <script is:inline>
+    const _cartKey = 'tcg.cart.items';
+
+    const _readCart = () => {
+      try {
+        const raw = localStorage.getItem(_cartKey);
+        return raw ? JSON.parse(raw) : [];
+      } catch { return []; }
+    };
+
+    const _writeCart = (items) => {
+      localStorage.setItem(_cartKey, JSON.stringify(items));
+      window.dispatchEvent(new CustomEvent('tcg:cart-updated'));
+    };
+
+    const itemsRoot = document.querySelector('#cart-items');
+    const emptyRoot = document.querySelector('#cart-empty');
+    const actionsRoot = document.querySelector('#cart-actions');
+    const clearButton = document.querySelector('#clear-cart');
+
+    const renderCart = () => {
+      const items = _readCart();
+      const hasItems = items.length > 0;
+
+      if (emptyRoot) emptyRoot.style.display = hasItems ? 'none' : '';
+      if (actionsRoot) actionsRoot.hidden = !hasItems;
+      if (!itemsRoot) return;
+
+      itemsRoot.innerHTML = items.map((item) => `
+        <article class="cart-item">
+          <div class="item-media">
+            ${item.image ? `<img src="${item.image}" alt="" loading="lazy">` : `<span aria-hidden="true">${(item.name || '?').slice(0, 1).toUpperCase()}</span>`}
+          </div>
+          <div class="item-info">
+            <strong>${item.name}</strong>
+            <p>${item.price} &middot; &times;${item.quantity}</p>
+          </div>
+          <button class="remove-item" type="button" data-id="${item.id}" aria-label="Quitar ${item.name}">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </article>
+      `).join('');
+
+      itemsRoot.querySelectorAll('.remove-item').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const updated = _readCart().filter((i) => i.id !== Number(btn.dataset.id));
+          _writeCart(updated);
+          renderCart();
+        });
+      });
+    };
+
+    if (clearButton) {
+      clearButton.addEventListener('click', () => {
+        _writeCart([]);
+        renderCart();
+      });
+    }
+
+    window.addEventListener('tcg:cart-updated', renderCart);
+    renderCart();
+  </script>
+</BaseLayout>
+
+<style>
+  .cart-view {
+    min-height: calc(100vh - 65px);
+    padding: 56px 0;
+    background: var(--color-surface-soft);
+  }
+
+  .cart-shell {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(360px, 1.1fr);
+    gap: 40px;
+    align-items: start;
+  }
+
+  .eyebrow {
+    margin: 0 0 12px;
+    color: var(--color-primary);
+    font-size: 0.82rem;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: clamp(2.6rem, 7vw, 5rem);
+    line-height: 1;
+  }
+
+  .lede,
+  .empty-cart p {
+    color: var(--color-body);
+    line-height: 1.7;
+  }
+
+  .cart-panel {
+    display: grid;
+    gap: 14px;
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-item);
+    background: var(--color-canvas);
+    padding: 22px;
+  }
+
+  .cart-items {
+    display: grid;
+    gap: 12px;
+  }
+
+  .cart-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  /* Elementos creados via innerHTML — necesitan :global() para saltarse el scope de Astro */
+  :global(.cart-item) {
+    display: grid;
+    grid-template-columns: 64px 1fr auto;
+    gap: 14px;
+    align-items: center;
+    border-bottom: 1px solid var(--color-hairline);
+    padding-bottom: 12px;
+  }
+
+  :global(.item-media) {
+    width: 64px;
+    height: 64px;
+    border-radius: var(--radius-item);
+    background: var(--color-surface-strong);
+    overflow: hidden;
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    color: var(--color-primary);
+    font-weight: 800;
+    font-size: 1.3rem;
+  }
+
+  :global(.item-media img) {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  :global(.item-info strong) {
+    display: block;
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  :global(.item-info p) {
+    margin: 0;
+    color: var(--color-body);
+    font-size: 0.88rem;
+  }
+
+  :global(.remove-item) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border: none;
+    border-radius: 50%;
+    background: #fde8e8;
+    color: #e53935;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.15s;
+  }
+
+  :global(.remove-item:hover) {
+    background: #e53935;
+    color: #fff;
+  }
+
+  [hidden] {
+    display: none;
+  }
+
+  @media (max-width: 860px) {
+    .cart-shell {
+      grid-template-columns: 1fr;
+    }
+
+    :global(.cart-item) {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

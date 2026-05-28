@@ -1,0 +1,189 @@
+---
+import BackButton from '../components/BackButton.astro';
+import ModuleDisabled from '../components/ModuleDisabled.astro';
+import SiteHeader from '../components/SiteHeader.astro';
+import { siteConfig } from '../config/site';
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title={`Ventas | ${siteConfig.name}`}>
+  <SiteHeader active="tienda" />
+
+  {
+    siteConfig.features.shop ? (
+      <main class="sales-view">
+        <section class="page-shell sales-shell">
+          <div>
+            <BackButton fallback="/admin" />
+            <p class="eyebrow">Ventas</p>
+            <h1>Panel de ventas</h1>
+            <p class="lede">Vista starter para lectura de ventas. En una implementacion real debe alimentarse de pedidos WooCommerce con permisos de administrador o vendedor.</p>
+          </div>
+
+          <section class="sales-panel">
+            <div class="metric">
+              <span>Pedidos</span>
+              <strong>24</strong>
+            </div>
+            <div class="metric">
+              <span>Ingresos</span>
+              <strong>1.840 EUR</strong>
+            </div>
+            <div class="metric">
+              <span>Pendientes</span>
+              <strong>6</strong>
+            </div>
+            <div class="chart-card">
+              <div class="chart-head">
+                <h2>Ventas demo</h2>
+                <span>Ultimos 7 dias</span>
+              </div>
+              <div class="chart" aria-label="Grafica demo de ventas semanales">
+                <span style="--value: 42" data-label="L"></span>
+                <span style="--value: 64" data-label="M"></span>
+                <span style="--value: 38" data-label="X"></span>
+                <span style="--value: 78" data-label="J"></span>
+                <span style="--value: 56" data-label="V"></span>
+                <span style="--value: 92" data-label="S"></span>
+                <span style="--value: 70" data-label="D"></span>
+              </div>
+            </div>
+            <p class="notice">Conecta esta vista a WooCommerce REST API cuando exista checkout real y roles definidos.</p>
+          </section>
+        </section>
+      </main>
+    ) : (
+      <ModuleDisabled
+        title="Ventas desactivadas"
+        summary="Ventas forma parte del modulo tienda. Puedes ocultarlo con PUBLIC_ENABLE_SHOP=false."
+      />
+    )
+  }
+</BaseLayout>
+
+<style>
+  .sales-view {
+    min-height: calc(100vh - 65px);
+    padding: 56px 0;
+    background: var(--color-surface-soft);
+  }
+
+  .sales-shell {
+    display: grid;
+    grid-template-columns: minmax(0, 0.85fr) minmax(360px, 1.15fr);
+    gap: 40px;
+    align-items: start;
+  }
+
+  .eyebrow {
+    margin: 0 0 12px;
+    color: var(--color-primary);
+    font-size: 0.82rem;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: clamp(2.6rem, 7vw, 5rem);
+    line-height: 1;
+  }
+
+  .lede,
+  .metric span,
+  .notice {
+    color: var(--color-body);
+    line-height: 1.7;
+  }
+
+  .sales-panel {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-item);
+    background: var(--color-canvas);
+    padding: 22px;
+  }
+
+  .metric {
+    display: grid;
+    gap: 8px;
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-item);
+    padding: 14px;
+  }
+
+  .metric strong {
+    font-size: 1.35rem;
+  }
+
+  .chart-card {
+    display: grid;
+    grid-column: 1 / -1;
+    gap: 18px;
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-item);
+    background: linear-gradient(180deg, var(--color-canvas), var(--color-surface-soft));
+    padding: 18px;
+  }
+
+  .chart-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .chart-head h2 {
+    margin: 0;
+    font-size: 1.05rem;
+  }
+
+  .chart-head span {
+    color: var(--color-body);
+    font-size: 0.9rem;
+  }
+
+  .chart {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 12px;
+    height: 220px;
+    align-items: end;
+    border-bottom: 1px solid var(--color-hairline);
+    padding-top: 12px;
+  }
+
+  .chart span {
+    position: relative;
+    display: block;
+    min-height: 28px;
+    height: calc(var(--value) * 1%);
+    border-radius: 8px 8px 0 0;
+    background: linear-gradient(180deg, var(--color-primary), #05b169);
+  }
+
+  .chart span::after {
+    content: attr(data-label);
+    position: absolute;
+    bottom: -28px;
+    left: 50%;
+    color: var(--color-body);
+    font-size: 0.82rem;
+    font-weight: 800;
+    transform: translateX(-50%);
+  }
+
+  .notice {
+    grid-column: 1 / -1;
+    margin: 8px 0 0;
+  }
+
+  @media (max-width: 860px) {
+    .sales-shell,
+    .sales-panel {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

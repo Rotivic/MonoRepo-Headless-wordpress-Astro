@@ -1,0 +1,115 @@
+---
+import SiteHeader from '../components/SiteHeader.astro';
+import { siteConfig } from '../config/site';
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title={`Compra realizada | ${siteConfig.name}`}>
+  <SiteHeader active="carrito" />
+
+  <main class="success-view">
+    <section class="page-shell success-shell">
+      <div>
+        <p class="eyebrow">Pedido creado</p>
+        <h1>Compra realizada</h1>
+        <p class="lede">Pantalla de confirmacion starter. Cuando conectes WooCommerce, aqui se mostrara el pedido real devuelto por el checkout.</p>
+        <div class="actions">
+          <a class="button button-primary" href="/mis-pedidos">Ver mis pedidos</a>
+          <a class="button button-secondary" href="/tienda">Seguir comprando</a>
+        </div>
+      </div>
+
+      <section class="success-panel">
+        <h2>Resumen</h2>
+        <p id="order-id" class="order-id">Pedido demo</p>
+        <div id="order-items" class="items"></div>
+      </section>
+    </section>
+  </main>
+
+  <script is:inline>
+    const orderKey = 'tcg.last-order';
+    const idRoot = document.querySelector('#order-id');
+    const itemsRoot = document.querySelector('#order-items');
+
+    try {
+      const order = JSON.parse(localStorage.getItem(orderKey) || 'null');
+      if (order && idRoot && itemsRoot) {
+        idRoot.textContent = order.id || 'Pedido demo';
+        itemsRoot.innerHTML = (order.items || []).map((item) => `
+          <article class="order-line">
+            <strong>${item.name}</strong>
+            <span>${item.price} x ${item.quantity}</span>
+          </article>
+        `).join('');
+      }
+    } catch {}
+  </script>
+</BaseLayout>
+
+<style>
+  .success-view {
+    min-height: calc(100vh - 65px);
+    padding: 56px 0;
+    background: var(--color-surface-soft);
+  }
+
+  .success-shell {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(360px, 1.1fr);
+    gap: 40px;
+    align-items: start;
+  }
+
+  .eyebrow {
+    margin: 0 0 12px;
+    color: var(--color-success);
+    font-size: 0.82rem;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: clamp(2.6rem, 7vw, 5rem);
+    line-height: 1;
+  }
+
+  .lede {
+    color: var(--color-body);
+    line-height: 1.7;
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 24px;
+  }
+
+  .success-panel {
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-item);
+    background: var(--color-canvas);
+    padding: 22px;
+  }
+
+  .order-id {
+    color: var(--color-body);
+    font-weight: 800;
+  }
+
+  :global(.order-line) {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    border-top: 1px solid var(--color-hairline);
+    padding: 12px 0;
+  }
+
+  @media (max-width: 860px) {
+    .success-shell {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

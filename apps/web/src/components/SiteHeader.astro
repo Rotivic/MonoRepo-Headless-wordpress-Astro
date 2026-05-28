@@ -1,0 +1,674 @@
+---
+import { siteConfig } from '../config/site';
+import { tcgApi } from '../lib/tcg-api';
+
+interface Props {
+  active?: 'home' | 'login' | 'registro' | 'perfil' | 'tienda' | 'carrito';
+}
+
+const { active = 'home' } = Astro.props;
+---
+
+<header class="site-header">
+  <div class="page-shell header-inner">
+    <a class="brand" href="/" aria-label={`${siteConfig.name} home`}>
+      <span class="brand-mark">T</span>
+      <span>{siteConfig.name}</span>
+    </a>
+
+    <nav class="nav-links" aria-label="Navegacion principal">
+      <a class:list={[{ active: active === 'home' }]} href="/">Inicio</a>
+      {siteConfig.features.shop && (
+        <a class:list={[{ active: active === 'tienda' }]} href="/tienda">Tienda</a>
+      )}
+    </nav>
+
+    <div class="nav-actions" data-auth-state="loading">
+      <!-- Guest -->
+      <a class:list={['button', 'button-secondary', 'session-guest', { active: active === 'login' }]} href="/login" hidden>
+        Entrar
+      </a>
+      <a class:list={['button', 'button-primary', 'session-guest', { active: active === 'registro' }]} href="/registro" hidden>
+        Crear cuenta
+      </a>
+
+      <!-- User: avatar dropdown -->
+      <div class="user-menu session-user" id="user-menu" hidden>
+        <button class="user-trigger" id="user-trigger" type="button" aria-label="Menu de usuario" aria-expanded="false" aria-haspopup="true" style="display:flex;align-items:center;border:none;background:transparent;cursor:pointer;padding:0;border-radius:50%;">
+          <div class="user-avatar" id="user-avatar" style="width:34px;height:34px;border-radius:50%;background:#eef0f3;color:#5b616e;display:grid;place-items:center;font-size:0.85rem;font-weight:700;overflow:hidden;border:2px solid #dee1e6;flex-shrink:0;">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:18px;height:18px;">
+              <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/>
+            </svg>
+          </div>
+        </button>
+        <div class="user-dropdown" id="user-dropdown" role="menu" aria-hidden="true" style="position:absolute;top:calc(100% + 8px);right:0;min-width:230px;border:1px solid #dee1e6;border-radius:8px;background:#fff;box-shadow:0 8px 24px rgba(0,0,0,0.10);overflow:hidden;z-index:30;display:none;">
+          <a href="/perfil" role="menuitem" style="display:flex;align-items:center;gap:10px;width:100%;padding:11px 16px;font-size:0.88rem;font-weight:500;color:#0a0b0d;text-decoration:none;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            Mi perfil
+          </a>
+          <a id="admin-link" href="/admin" role="menuitem" hidden style="display:flex;align-items:center;gap:10px;width:100%;padding:11px 16px;font-size:0.88rem;font-weight:500;color:#0a0b0d;text-decoration:none;border-top:1px solid #dee1e6;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 4v5c0 5-3.4 8.7-8 9-4.6-.3-8-4-8-9V7l8-4z"/><path d="M9 12l2 2 4-4"/></svg>
+            Administracion
+          </a>
+          <button id="header-logout" type="button" role="menuitem" style="display:flex;align-items:center;gap:10px;width:100%;padding:11px 16px;font-size:0.88rem;font-weight:500;color:#e53935;background:transparent;border:none;border-top:1px solid #dee1e6;cursor:pointer;text-align:left;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            Cerrar sesion
+          </button>
+        </div>
+      </div>
+
+      <!-- Cart icon -->
+      {siteConfig.features.shop && (
+        <button class="cart-trigger" id="cart-trigger" type="button" aria-label="Abrir carrito">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
+            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+          </svg>
+          <span class="cart-badge" id="cart-badge" aria-hidden="true">0</span>
+        </button>
+      )}
+    </div>
+  </div>
+</header>
+
+{siteConfig.features.shop && (
+  <>
+    <div class="cart-backdrop" id="cart-backdrop"></div>
+    <aside class="cart-canvas" id="cart-canvas" aria-label="Carrito" aria-hidden="true">
+      <div class="canvas-header">
+        <h2>Carrito</h2>
+        <button class="canvas-close" id="canvas-close" type="button" aria-label="Cerrar carrito">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="canvas-body">
+        <ul class="canvas-items" id="canvas-items" aria-live="polite"></ul>
+        <div class="canvas-empty" id="canvas-empty">
+          <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
+            <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
+            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+          </svg>
+          <p>Tu carrito esta vacio</p>
+          <a class="button button-secondary" href="/tienda">Ir a tienda</a>
+        </div>
+      </div>
+      <div class="canvas-footer" id="canvas-footer">
+        <a class="button button-primary canvas-cta" href="/carrito">Ver carrito completo</a>
+      </div>
+    </aside>
+  </>
+)}
+
+<script is:inline define:vars={{ meUrl: tcgApi.me, logoutUrl: tcgApi.logout, shopEnabled: siteConfig.features.shop }}>
+  const navActions = document.querySelector('.nav-actions');
+  const guestItems = document.querySelectorAll('.session-guest');
+  const userMenu = document.querySelector('#user-menu');
+  const userAvatar = document.querySelector('#user-avatar');
+  const adminLink = document.querySelector('#admin-link');
+  const userTrigger = document.querySelector('#user-trigger');
+  const userDropdown = document.querySelector('#user-dropdown');
+  const logoutButton = document.querySelector('#header-logout');
+  const authKey = 'tcg.authenticated';
+  const userSummaryKey = 'tcg.user.summary';
+
+  const getInitials = (user) => {
+    return ([user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.email || 'U').slice(0, 1).toUpperCase();
+  };
+
+  const renderAvatar = (summary) => {
+    if (!userAvatar || !summary) return;
+
+    if (summary.avatar_url) {
+      userAvatar.innerHTML = '<img src="' + summary.avatar_url + '" alt="Avatar">';
+      return;
+    }
+
+    userAvatar.textContent = summary.initials || 'U';
+  };
+
+  const readCachedSummary = () => {
+    try { return JSON.parse(localStorage.getItem(userSummaryKey) || 'null'); } catch { return null; }
+  };
+
+  const setLoggedIn = (isLoggedIn, user) => {
+    navActions?.setAttribute('data-auth-state', isLoggedIn ? 'user' : 'guest');
+    guestItems.forEach((el) => { el.hidden = isLoggedIn; });
+    if (userMenu) userMenu.hidden = !isLoggedIn;
+
+    if (isLoggedIn) {
+      const summary = user
+        ? { avatar_url: user.avatar_url || '', initials: getInitials(user), is_admin: Boolean(user.is_admin) }
+        : readCachedSummary();
+
+      renderAvatar(summary);
+      if (adminLink) adminLink.hidden = !summary?.is_admin;
+    } else if (adminLink) {
+      adminLink.hidden = true;
+    }
+
+    try {
+      if (isLoggedIn) {
+        localStorage.setItem(authKey, '1');
+
+        if (user) {
+          localStorage.setItem(userSummaryKey, JSON.stringify({
+            avatar_url: user.avatar_url || '',
+            initials: getInitials(user),
+            is_admin: Boolean(user.is_admin),
+          }));
+        }
+      } else {
+        localStorage.removeItem(authKey);
+        localStorage.removeItem(userSummaryKey);
+      }
+    } catch {}
+  };
+
+  // Optimistic hint from previous session
+  try {
+    if (localStorage.getItem(authKey) === '1') setLoggedIn(true, null);
+  } catch {}
+
+  // Real auth check
+  fetch(meUrl, { credentials: 'include' })
+    .then((r) => {
+      if (r.ok) return r.json().then((d) => setLoggedIn(true, d.data));
+      else setLoggedIn(false, null);
+    })
+    .catch(() => setLoggedIn(false, null));
+
+  // Dropdown toggle
+  const openDropdown = () => {
+    if (userDropdown) userDropdown.style.display = 'block';
+    userTrigger?.setAttribute('aria-expanded', 'true');
+  };
+  const closeDropdown = () => {
+    if (userDropdown) userDropdown.style.display = 'none';
+    userTrigger?.setAttribute('aria-expanded', 'false');
+  };
+
+  userTrigger?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    userDropdown?.style.display === 'block' ? closeDropdown() : openDropdown();
+  });
+
+  document.addEventListener('click', closeDropdown);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDropdown(); });
+
+  logoutButton?.addEventListener('click', async () => {
+    try { await fetch(logoutUrl, { method: 'POST', credentials: 'include' }); } catch {}
+    setLoggedIn(false, null);
+    window.location.assign('/login');
+  });
+
+  if (!shopEnabled) return;
+
+  // --- Cart ---
+  const cartKey = 'tcg.cart.items';
+  const readCart = () => {
+    try { return JSON.parse(localStorage.getItem(cartKey) || '[]'); } catch { return []; }
+  };
+
+  const badge = document.querySelector('#cart-badge');
+  const canvas = document.querySelector('#cart-canvas');
+  const backdrop = document.querySelector('#cart-backdrop');
+  const canvasItems = document.querySelector('#canvas-items');
+  const canvasEmpty = document.querySelector('#canvas-empty');
+  const canvasFooter = document.querySelector('#canvas-footer');
+
+  const updateBadge = () => {
+    if (!badge) return;
+    const total = readCart().reduce((s, i) => s + (i.quantity || 1), 0);
+    badge.textContent = String(total > 99 ? '99+' : total);
+    badge.classList.toggle('visible', total > 0);
+  };
+
+  const renderCanvas = () => {
+    const items = readCart();
+    const hasItems = items.length > 0;
+    if (canvasEmpty) canvasEmpty.style.display = hasItems ? 'none' : 'flex';
+    if (canvasFooter) canvasFooter.style.display = hasItems ? 'flex' : 'none';
+    if (!canvasItems) return;
+
+    canvasItems.innerHTML = items.map((item) => `
+      <li class="canvas-item">
+        <div class="canvas-item-media">
+          ${item.image ? '<img src="' + item.image + '" alt="" loading="lazy">' : '<span aria-hidden="true">' + (item.name || '?').slice(0, 1).toUpperCase() + '</span>'}
+        </div>
+        <div class="canvas-item-info">
+          <strong>${item.name}</strong>
+          <p>${item.price} &middot; &times;${item.quantity}</p>
+        </div>
+        <button class="canvas-remove" type="button" data-id="${item.id}" aria-label="Quitar ${item.name}">
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </li>
+    `).join('');
+
+    canvasItems.querySelectorAll('.canvas-remove').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const updated = readCart().filter((i) => i.id !== Number(btn.dataset.id));
+        try { localStorage.setItem(cartKey, JSON.stringify(updated)); } catch {}
+        window.dispatchEvent(new CustomEvent('tcg:cart-updated'));
+        renderCanvas();
+        updateBadge();
+      });
+    });
+  };
+
+  const openCanvas = () => {
+    canvas?.setAttribute('aria-hidden', 'false');
+    canvas?.classList.add('open');
+    backdrop?.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    renderCanvas();
+  };
+
+  const closeCanvas = () => {
+    canvas?.setAttribute('aria-hidden', 'true');
+    canvas?.classList.remove('open');
+    backdrop?.classList.remove('open');
+    document.body.style.overflow = '';
+  };
+
+  document.querySelector('#cart-trigger')?.addEventListener('click', openCanvas);
+  document.querySelector('#canvas-close')?.addEventListener('click', closeCanvas);
+  backdrop?.addEventListener('click', closeCanvas);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCanvas(); });
+  window.addEventListener('tcg:cart-updated', () => { updateBadge(); if (canvas?.classList.contains('open')) renderCanvas(); });
+
+  updateBadge();
+</script>
+
+<style>
+  .site-header {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    border-bottom: 1px solid var(--color-hairline);
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(14px);
+  }
+
+  .header-inner {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    min-height: 64px;
+    align-items: center;
+    gap: 24px;
+  }
+
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--color-ink);
+    font-weight: 800;
+  }
+
+  .brand-mark {
+    display: inline-grid;
+    width: 32px;
+    height: 32px;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--color-primary);
+    color: #fff;
+  }
+
+  .nav-links,
+  .nav-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  [hidden] { display: none !important; }
+
+  .nav-actions[data-auth-state="loading"] .session-guest,
+  .nav-actions[data-auth-state="loading"] .session-user,
+  .nav-actions[data-auth-state="guest"] .session-user,
+  .nav-actions[data-auth-state="user"] .session-guest {
+    display: none;
+  }
+
+  .nav-links a {
+    border-radius: var(--radius-pill);
+    color: var(--color-body);
+    font-size: 0.9rem;
+    font-weight: 700;
+    padding: 9px 12px;
+  }
+
+  .nav-links a.active {
+    color: var(--color-ink);
+    background: var(--color-surface-strong);
+  }
+
+  /* User menu */
+  .user-menu {
+    position: relative;
+  }
+
+  .user-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    padding: 0;
+    border-radius: 50%;
+  }
+
+  .user-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: var(--color-surface-strong);
+    color: var(--color-body);
+    display: grid;
+    place-items: center;
+    font-size: 0.85rem;
+    font-weight: 700;
+    overflow: hidden;
+    border: 2px solid transparent;
+    transition: border-color 0.15s;
+  }
+
+  .user-trigger:hover .user-avatar,
+  .user-trigger[aria-expanded="true"] .user-avatar {
+    border-color: var(--color-primary);
+  }
+
+  .user-avatar svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  :global(.user-avatar img) {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .user-dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    min-width: 230px;
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-item);
+    background: var(--color-canvas, #fff);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+    overflow: hidden;
+    z-index: 30;
+  }
+
+  .user-dropdown[aria-hidden="true"] {
+    display: none;
+  }
+
+  .dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 11px 16px;
+    font-size: 0.88rem;
+    font-weight: 500;
+    color: var(--color-ink);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    text-decoration: none;
+    transition: background 0.1s;
+  }
+
+  .dropdown-item:hover {
+    background: var(--color-surface-soft);
+  }
+
+  .dropdown-item + .dropdown-item {
+    border-top: 1px solid var(--color-hairline);
+  }
+
+  .dropdown-logout {
+    color: #e53935;
+  }
+
+  /* Los items del dropdown llevan style inline → necesitan :global para hover */
+  :global(#user-dropdown a:hover),
+  :global(#user-dropdown button:hover) {
+    background: #f7f7f7 !important;
+  }
+
+  /* Cart trigger */
+  .cart-trigger {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border: none;
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--color-body);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .cart-trigger:hover {
+    background: var(--color-surface-strong);
+    color: var(--color-ink);
+  }
+
+  .cart-badge {
+    display: none;
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: #e53935;
+    color: #fff;
+    font-size: 0.62rem;
+    font-weight: 800;
+    line-height: 16px;
+    text-align: center;
+    pointer-events: none;
+  }
+
+  .cart-badge.visible {
+    display: block;
+  }
+
+  /* Backdrop */
+  .cart-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 39;
+    background: rgba(0,0,0,0);
+    visibility: hidden;
+    transition: background 0.25s, visibility 0s 0.25s;
+  }
+
+  .cart-backdrop.open {
+    background: rgba(0,0,0,0.38);
+    visibility: visible;
+    transition: background 0.25s;
+  }
+
+  /* Off-canvas */
+  .cart-canvas {
+    position: fixed;
+    top: 0;
+    right: 0;
+    z-index: 40;
+    display: flex;
+    flex-direction: column;
+    width: min(400px, 100vw);
+    height: 100dvh;
+    background: var(--color-canvas, #fff);
+    box-shadow: -8px 0 32px rgba(0,0,0,0.1);
+    transform: translateX(100%);
+    transition: transform 0.28s cubic-bezier(0.4,0,0.2,1);
+    overflow: hidden;
+  }
+
+  .cart-canvas.open { transform: translateX(0); }
+
+  .canvas-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--color-hairline);
+    flex-shrink: 0;
+  }
+
+  .canvas-header h2 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+  }
+
+  .canvas-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--color-body);
+    cursor: pointer;
+  }
+
+  .canvas-close:hover { background: var(--color-surface-strong); }
+
+  .canvas-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px;
+  }
+
+  .canvas-items {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 12px;
+  }
+
+  .canvas-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 40px 0;
+    text-align: center;
+    color: var(--color-body);
+  }
+
+  .canvas-empty.is-hidden,
+  .canvas-footer.is-hidden {
+    display: none !important;
+  }
+
+  .canvas-empty p { margin: 0; }
+
+  .canvas-footer {
+    padding: 16px 20px;
+    border-top: 1px solid var(--color-hairline);
+    flex-shrink: 0;
+  }
+
+  .canvas-cta {
+    display: flex !important;
+    width: 100%;
+    text-align: center;
+  }
+
+  /* Canvas item (innerHTML → :global) */
+  :global(.canvas-item) {
+    display: grid;
+    grid-template-columns: 52px 1fr auto;
+    gap: 12px;
+    align-items: center;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--color-hairline);
+  }
+
+  :global(.canvas-item-media) {
+    width: 52px;
+    height: 52px;
+    border-radius: 8px;
+    background: var(--color-surface-strong);
+    overflow: hidden;
+    display: grid;
+    place-items: center;
+    color: var(--color-primary);
+    font-weight: 800;
+    font-size: 1.1rem;
+  }
+
+  :global(.canvas-item-media img) {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  :global(.canvas-item-info strong) {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+
+  :global(.canvas-item-info p) {
+    margin: 0;
+    font-size: 0.82rem;
+    color: var(--color-body);
+  }
+
+  :global(.canvas-remove) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 50%;
+    background: #fde8e8;
+    color: #e53935;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.15s;
+  }
+
+  :global(.canvas-remove:hover) {
+    background: #e53935;
+    color: #fff;
+  }
+
+  @media (max-width: 760px) {
+    .header-inner {
+      grid-template-columns: 1fr;
+      gap: 12px;
+      padding: 14px 0;
+    }
+
+    .nav-links,
+    .nav-actions {
+      justify-content: space-between;
+    }
+  }
+</style>
