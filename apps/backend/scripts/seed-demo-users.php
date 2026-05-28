@@ -10,20 +10,12 @@ $users = [
         'role' => 'administrator',
     ],
     [
-        'user_login' => 'vendedor_demo',
-        'user_email' => 'vendedor.demo@example.test',
+        'user_login' => 'usuario_demo',
+        'user_email' => 'usuario.demo@example.test',
         'user_pass' => 'PasswordDemo123!',
-        'first_name' => 'Vendedor',
+        'first_name' => 'Usuario',
         'last_name' => 'Demo',
-        'role' => 'shop_manager',
-    ],
-    [
-        'user_login' => 'cliente_demo',
-        'user_email' => 'cliente.demo@example.test',
-        'user_pass' => 'PasswordDemo123!',
-        'first_name' => 'Cliente',
-        'last_name' => 'Demo',
-        'role' => 'customer',
+        'role' => 'subscriber',
     ],
 ];
 

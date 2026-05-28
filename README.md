@@ -194,7 +194,6 @@ Incluye:
 Plugins gestionados por Composer:
 
 - Redis Object Cache
-- WooCommerce
 - Advanced Custom Fields
 - Fluent Forms
 
@@ -257,7 +256,6 @@ Plugins base instalados:
 
 ```text
 wpackagist-plugin/redis-cache
-wpackagist-plugin/woocommerce
 wpackagist-plugin/advanced-custom-fields
 wpackagist-plugin/fluentform
 ```
@@ -275,13 +273,6 @@ Para actualizar dependencias ya definidas:
 docker compose exec php composer install --no-interaction --prefer-dist --optimize-autoloader
 ```
 
-WooCommerce queda disponible para catalogo y productos desde el admin de WordPress y desde endpoints REST como:
-
-```text
-http://localhost:8080/wp-json/wp/v2/product
-http://localhost:8080/wp-json/wc/store/v1/products
-```
-
 ACF permite definir campos personalizados desde WordPress. Para consumir esos campos desde Astro o Flutter, marca los grupos/campos necesarios como visibles en REST cuando corresponda. Si en el futuro necesitas ACF Pro, no se instala desde WPackagist publico: requiere licencia y repositorio Composer privado o un flujo privado equivalente.
 
 Fluent Forms queda disponible para formularios gestionados desde WordPress. En una implementacion real conviene exponer solo los formularios necesarios al frontend y validar cada envio con permisos, rate limit, captcha/honeypot o doble opt-in segun el caso.
@@ -291,9 +282,7 @@ Fluent Forms queda disponible para formularios gestionados desde WordPress. En u
 El starter incluye un mu-plugin de endurecimiento en `apps/backend/web/app/mu-plugins/tcg-hardening.php`:
 
 - Redirige el frontend publico de WordPress hacia Astro.
-- Reserva `wp-admin` para administradores y gestores de tienda.
-- Limita al `shop_manager` a gestion operativa de WooCommerce/productos/pedidos.
-- Oculta menus internos como temas, plugins, ajustes, usuarios y ACF para gestores de tienda.
+- Reserva `wp-admin` para administradores.
 - Desactiva comentarios, pingbacks, trackbacks, XML-RPC y endpoints REST de comentarios.
 - Mantiene plugins/temas gestionados por Composer, no desde el panel.
 
@@ -307,12 +296,11 @@ La plantilla incluye seeds demo para dejar un entorno util desde el primer arran
 npm run backend:seed
 ```
 
-El primer `docker compose up -d --build` ejecuta `scripts/seed-demo-all.php` por defecto. Esto crea contenido de ejemplo, productos demo y usuarios base si no existen:
+El primer `docker compose up -d --build` ejecuta `scripts/seed-demo-all.php` por defecto. Esto crea contenido de ejemplo y usuarios base si no existen:
 
 ```text
 admin_demo      admin.demo@example.test       administrator
-vendedor_demo   vendedor.demo@example.test    shop_manager
-cliente_demo    cliente.demo@example.test     customer
+usuario_demo    usuario.demo@example.test     subscriber
 ```
 
 Password demo:
@@ -327,7 +315,7 @@ Para arrancar una instalacion limpia sin contenido demo, define:
 WP_DEMO_SEED=false
 ```
 
-Puedes volver a lanzar los seeds manualmente con `npm run backend:seed` o con los comandos separados `npm run seed:shop`, `npm run seed:blog` y `npm run seed:users`.
+Puedes volver a lanzar los seeds manualmente con `npm run backend:seed` o con los comandos separados `npm run seed:blog` y `npm run seed:users`.
 
 ## Frontend Astro
 
@@ -347,16 +335,18 @@ Variable expuesta al frontend:
 
 ```text
 PUBLIC_WORDPRESS_API_URL=http://localhost:8080/wp-json
-PUBLIC_ENABLE_SHOP=true
+PUBLIC_ENABLE_SHOP=false
 PUBLIC_ENABLE_BLOG=true
 ```
 
-La web esta preparada como plantilla modular. Puedes ocultar tienda o blog por entorno sin quitar WordPress/WooCommerce del backend:
+La web esta preparada como plantilla modular. En `develop`, la tienda queda apagada por defecto para mantener una base generica:
 
 ```text
 PUBLIC_ENABLE_SHOP=false
 PUBLIC_ENABLE_BLOG=false
 ```
+
+La rama `Shop` mantiene WooCommerce y el modulo de tienda preparados para catalogo, carrito, checkout y pedidos.
 
 Scripts disponibles:
 
@@ -526,25 +516,21 @@ Permite editar nombre/apellidos/nombre visible, cambiar contrasena, activar/desa
 
 Las rutas `/recuperar` y `/verificar-email` completan el flujo base de cuenta con recuperacion de contrasena por email y verificacion de email local mediante Mailpit.
 
-Rutas Astro iniciales para tienda:
+Rutas Astro iniciales:
 
 ```text
-/tienda
-/producto?slug=...
-/carrito
-/checkout
-/compra-realizada
-/wishlist
-/mis-pedidos
-/inventario
-/ventas
 /admin
 /usuarios
+/perfil
+/login
+/registro
+/recuperar
+/verificar-email
 ```
 
-Estas rutas son una base visual y funcional ligera. La tienda lee productos desde WooCommerce Store API, el producto usa `slug` por query string para no depender de rutas generadas en build, y el carrito guarda una seleccion local. Wishlist usa `localStorage` por ahora, pedidos queda como placeholder para conectarlo al checkout real, y checkout/compra realizada simulan el flujo sin pasarela externa.
+Las rutas de tienda pueden existir como modulo apagado, pero no se muestran ni se activan en `develop`. Para trabajar catalogo, carrito, checkout, wishlist, inventario o ventas, usa la rama `Shop`.
 
-`/inventario`, `/ventas`, `/admin` y `/usuarios` son vistas de backoffice frontend. Estan pensadas como lectura, resumen o lanzadera hacia WordPress, no como sustituto completo de `wp-admin`. La regla de la plantilla es: WordPress gestiona contenido, productos, stock, pedidos, usuarios y configuracion; Astro muestra datos utiles, flujos de usuario y acciones controladas que tengan sentido fuera del panel. El listado de usuarios es solo para administradores y enlaza cada fila al editor real de WordPress.
+`/admin` y `/usuarios` son vistas de backoffice frontend. Estan pensadas como lectura, resumen o lanzadera hacia WordPress, no como sustituto completo de `wp-admin`. El listado de usuarios es solo para administradores y enlaza cada fila al editor real de WordPress.
 
 ## Estructura Astro
 
@@ -646,7 +632,6 @@ Seeds separados:
 
 ```sh
 npm run seed
-npm run seed:shop
 npm run seed:blog
 npm run seed:users
 ```
@@ -731,7 +716,7 @@ Docker Compose define estos volumenes:
 - `mobile_pub_cache`: cache de paquetes Pub para el contenedor Flutter
 - `mobile_gradle_cache`: cache Gradle para builds Android desde el contenedor
 
-Esto permite reiniciar contenedores sin perder la base de datos ni reinstalar paquetes en cada arranque. En Windows tambien evita que el bootstrap de WordPress dependa de leer `vendor`, `web/wp` y plugins grandes como WooCommerce desde el sistema de archivos del host.
+Esto permite reiniciar contenedores sin perder la base de datos ni reinstalar paquetes en cada arranque. En Windows tambien evita que el bootstrap de WordPress dependa de leer `vendor`, `web/wp` y plugins grandes desde el sistema de archivos del host.
 
 ## Notas de desarrollo
 

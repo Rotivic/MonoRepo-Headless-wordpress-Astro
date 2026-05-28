@@ -4,7 +4,7 @@ export const siteConfig = {
   apiUrl: import.meta.env.PUBLIC_WORDPRESS_API_URL ?? 'http://localhost:8080/wp-json',
   internalApiUrl: import.meta.env.WORDPRESS_API_URL ?? import.meta.env.PUBLIC_WORDPRESS_API_URL ?? 'http://localhost:8080/wp-json',
   features: {
-    shop: import.meta.env.PUBLIC_ENABLE_SHOP !== 'false',
+    shop: import.meta.env.PUBLIC_ENABLE_SHOP === 'true',
     blog: import.meta.env.PUBLIC_ENABLE_BLOG !== 'false',
   },
 };

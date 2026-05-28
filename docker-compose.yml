@@ -63,7 +63,7 @@ services:
     environment:
       WORDPRESS_API_URL: http://nginx/wp-json
       PUBLIC_WORDPRESS_API_URL: http://localhost:8080/wp-json
-      PUBLIC_ENABLE_SHOP: ${PUBLIC_ENABLE_SHOP:-true}
+      PUBLIC_ENABLE_SHOP: ${PUBLIC_ENABLE_SHOP:-false}
       PUBLIC_ENABLE_BLOG: ${PUBLIC_ENABLE_BLOG:-true}
     command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
     depends_on:

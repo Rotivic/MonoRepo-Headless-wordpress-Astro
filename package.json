@@ -12,7 +12,6 @@
     "backend:composer": "docker compose exec php composer install --no-interaction --prefer-dist --optimize-autoloader",
     "backend:plugins": "docker compose exec php wp plugin list --fields=name,status,version --allow-root",
     "seed": "docker compose exec php wp eval-file scripts/seed-demo-all.php --allow-root",
-    "seed:shop": "docker compose exec php wp eval-file scripts/seed-demo-products.php --allow-root",
     "seed:blog": "docker compose exec php wp eval-file scripts/seed-demo-blog.php --allow-root",
     "seed:users": "docker compose exec php wp eval-file scripts/seed-demo-users.php --allow-root",
     "backend:seed": "npm run seed",

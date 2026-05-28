@@ -13,8 +13,7 @@ Este proyecto separa dos modos de autenticacion:
 - Proteccion CSRF para rutas autenticadas con cookie mediante header `X-TCG-CSRF`.
 - CORS limitado a origenes permitidos y con credenciales solo para esos origenes.
 - Rutas admin protegidas con `manage_options`.
-- `wp-admin` reservado a administradores y gestores de tienda; clientes se redirigen al frontend.
-- Gestores de tienda limitados a gestion WooCommerce/productos/pedidos, sin menus internos como plugins, temas, ajustes, usuarios o ACF.
+- `wp-admin` reservado a administradores; usuarios finales se redirigen al frontend.
 - Frontend publico de WordPress redirigido al frontend Astro; WordPress queda como CMS/API headless.
 - Comentarios, pingbacks, trackbacks, XML-RPC y endpoints REST de comentarios/usuarios desactivados.
 - Honeypot basico en registro web para cortar bots simples antes de crear usuarios.

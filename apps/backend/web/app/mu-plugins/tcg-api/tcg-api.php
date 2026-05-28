@@ -244,7 +244,7 @@ final class TCG_Platform_API
             'first_name' => $first_name,
             'last_name' => $last_name,
             'display_name' => trim("{$first_name} {$last_name}") ?: $email,
-            'role' => class_exists('WooCommerce') ? 'customer' : 'subscriber',
+            'role' => 'subscriber',
         ]);
 
         if (is_wp_error($user_id)) {
@@ -278,10 +278,6 @@ final class TCG_Platform_API
             'database' => [
                 'status' => $wpdb->check_connection(false) ? 'ok' : 'error',
                 'label' => 'Base de datos',
-            ],
-            'woocommerce' => [
-                'status' => class_exists('WooCommerce') ? 'ok' : 'warning',
-                'label' => 'WooCommerce activo',
             ],
             'acf' => [
                 'status' => function_exists('acf') ? 'ok' : 'warning',
@@ -963,8 +959,7 @@ final class TCG_Platform_API
             'enabled' => true,
             'is_verified' => self::is_email_verified((int) $user->ID),
             'is_admin' => user_can($user, 'manage_options'),
-            'is_shop_manager' => user_can($user, 'manage_woocommerce') || user_can($user, 'edit_products'),
-            'can_access_backoffice' => user_can($user, 'manage_options') || user_can($user, 'manage_woocommerce') || user_can($user, 'edit_products'),
+            'can_access_backoffice' => user_can($user, 'manage_options'),
             'is_superadmin' => is_multisite() ? is_super_admin($user->ID) : false,
             'avatar_url' => get_avatar_url($user->ID),
             'created_at' => mysql_to_rfc3339($user->user_registered),

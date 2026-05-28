@@ -6,7 +6,6 @@ cd /var/www/html
 if [ ! -f "vendor/autoload.php" ] \
   || [ ! -f "web/wp/wp-settings.php" ] \
   || [ ! -f "web/app/plugins/redis-cache/redis-cache.php" ] \
-  || [ ! -f "web/app/plugins/woocommerce/woocommerce.php" ] \
   || [ ! -f "web/app/plugins/advanced-custom-fields/acf.php" ] \
   || [ ! -f "web/app/plugins/fluentform/fluentform.php" ]; then
   echo "Installing Composer dependencies..."
@@ -46,7 +45,6 @@ wp option update default_comment_status closed --allow-root
 wp option update default_ping_status closed --allow-root
 
 wp plugin activate redis-cache --allow-root || true
-wp plugin activate woocommerce --allow-root || true
 wp plugin activate advanced-custom-fields --allow-root || true
 wp plugin activate fluentform --allow-root || true
 wp language plugin install --all "${WORDPRESS_LOCALE}" --allow-root || true

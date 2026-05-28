@@ -20,8 +20,6 @@ final class TCG_Platform_Hardening
         add_action('init', [self::class, 'disable_comments_support'], 20);
         add_action('template_redirect', [self::class, 'redirect_wordpress_frontend'], 0);
         add_action('admin_init', [self::class, 'guard_wp_admin'], 0);
-        add_action('admin_menu', [self::class, 'trim_shop_manager_admin_menu'], 999);
-        add_action('wp_dashboard_setup', [self::class, 'trim_shop_manager_dashboard'], 999);
         add_action('login_enqueue_scripts', [self::class, 'login_notice']);
 
         add_filter('comments_open', '__return_false', 20);
@@ -89,40 +87,6 @@ final class TCG_Platform_Hardening
             exit;
         }
 
-        if (self::is_shop_manager() && isset($GLOBALS['pagenow']) && $GLOBALS['pagenow'] === 'index.php') {
-            wp_safe_redirect(admin_url('edit.php?post_type=product'));
-            exit;
-        }
-    }
-
-    public static function trim_shop_manager_admin_menu(): void
-    {
-        if (current_user_can('manage_options') || ! self::is_shop_manager()) {
-            return;
-        }
-
-        remove_menu_page('index.php');
-        remove_menu_page('edit.php');
-        remove_menu_page('upload.php');
-        remove_menu_page('edit.php?post_type=page');
-        remove_menu_page('edit-comments.php');
-        remove_menu_page('themes.php');
-        remove_menu_page('plugins.php');
-        remove_menu_page('users.php');
-        remove_menu_page('tools.php');
-        remove_menu_page('options-general.php');
-        remove_menu_page('edit.php?post_type=acf-field-group');
-        remove_menu_page('fluent_forms');
-    }
-
-    public static function trim_shop_manager_dashboard(): void
-    {
-        if (current_user_can('manage_options') || ! self::is_shop_manager()) {
-            return;
-        }
-
-        global $wp_meta_boxes;
-        $wp_meta_boxes['dashboard'] = [];
     }
 
     public static function login_notice(): void
@@ -145,7 +109,7 @@ final class TCG_Platform_Hardening
                 if (!form) return;
                 var notice = document.createElement('p');
                 notice.className = 'tcg-login-notice';
-                notice.textContent = 'El panel de WordPress esta reservado para administradores y gestores de tienda. Clientes y usuarios finales deben usar el frontend.';
+                notice.textContent = 'El panel de WordPress esta reservado para administradores. Los usuarios finales deben usar el frontend.';
                 form.parentNode.insertBefore(notice, form);
             });
         </script>
@@ -189,10 +153,6 @@ final class TCG_Platform_Hardening
             return admin_url();
         }
 
-        if (user_can($user, 'manage_woocommerce') || user_can($user, 'edit_products')) {
-            return admin_url('edit.php?post_type=product');
-        }
-
         return self::frontend_url('/perfil') ?: home_url('/');
     }
 
@@ -208,17 +168,7 @@ final class TCG_Platform_Hardening
 
     private static function can_access_wp_admin(): bool
     {
-        return current_user_can('manage_options')
-            || current_user_can('manage_woocommerce')
-            || current_user_can('edit_products')
-            || current_user_can('edit_shop_orders');
-    }
-
-    private static function is_shop_manager(): bool
-    {
-        $user = wp_get_current_user();
-
-        return $user instanceof WP_User && in_array('shop_manager', (array) $user->roles, true);
+        return current_user_can('manage_options');
     }
 
     private static function is_rest_request(): bool
