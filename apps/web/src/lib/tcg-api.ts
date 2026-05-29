@@ -17,5 +17,7 @@ export const tcgApi = {
   twoFactorEnable: `${siteConfig.apiUrl}/tcg/v1/2fa/enable`,
   twoFactorDisable: `${siteConfig.apiUrl}/tcg/v1/2fa/disable`,
   twoFactorVerify: `${siteConfig.apiUrl}/tcg/v1/2fa/verify`,
+  wishlist: `${siteConfig.apiUrl}/tcg/v1/wishlist`,
+  wishlistItem: (productId: number | string) => `${siteConfig.apiUrl}/tcg/v1/wishlist/${productId}`,
   adminUsers: `${siteConfig.apiUrl}/tcg/v1/admin/users`,
 };

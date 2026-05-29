@@ -9,7 +9,7 @@ if (! defined('ABSPATH')) {
 final class TCG_Platform_API
 {
     private const NAMESPACE = 'tcg/v1';
-    private const DB_VERSION = '1';
+    private const DB_VERSION = '2';
     private const DB_VERSION_OPTION = 'tcg_api_db_version';
     private const TOKEN_TTL = 30 * DAY_IN_SECONDS;
     private const LOGIN_LIMIT = 5;
@@ -89,6 +89,10 @@ final class TCG_Platform_API
         ) {$charset_collate};";
 
         dbDelta($sql);
+
+        if (class_exists('TCG_Platform_API_Wishlist')) {
+            TCG_Platform_API_Wishlist::install();
+        }
     }
 
     public static function register_routes(): void
@@ -202,6 +206,10 @@ final class TCG_Platform_API
             'callback' => [self::class, 'two_factor_verify'],
             'permission_callback' => '__return_true',
         ]);
+
+        if (class_exists('TCG_Platform_API_Wishlist')) {
+            TCG_Platform_API_Wishlist::register_routes(self::NAMESPACE);
+        }
     }
 
     public static function register_user(WP_REST_Request $request): WP_REST_Response|WP_Error
@@ -1564,7 +1572,7 @@ final class TCG_Platform_API
         return is_string($user_agent) ? substr(sanitize_text_field($user_agent), 0, 500) : '';
     }
 
-    private static function now(): string
+    public static function now(): string
     {
         return current_time('mysql', true);
     }

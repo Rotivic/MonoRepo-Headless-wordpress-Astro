@@ -1,28 +1,9 @@
 ﻿---
 import ModuleDisabled from '../../components/ModuleDisabled.astro';
 import Pagination from '../../components/Pagination.astro';
-import ProductCard from '../../components/ProductCard.astro';
 import SiteHeader from '../../components/SiteHeader.astro';
 import { siteConfig } from '../../config/site';
 import BaseLayout from '../../layouts/BaseLayout.astro';
-import { shopApiInternal, type StoreProduct } from '../../lib/shop';
-
-let products: StoreProduct[] = [];
-let error = '';
-
-if (siteConfig.features.shop) {
-  try {
-    const response = await fetch(`${shopApiInternal.products}?per_page=48`);
-
-    if (!response.ok) {
-      throw new Error(`WooCommerce respondio con ${response.status}`);
-    }
-
-    products = await response.json();
-  } catch (caught) {
-    error = caught instanceof Error ? caught.message : 'No se pudo cargar la tienda.';
-  }
-}
 ---
 
 <BaseLayout title={`Tienda | ${siteConfig.name}`}>
@@ -43,25 +24,25 @@ if (siteConfig.features.shop) {
         </section>
 
         <section class="page-shell">
-          {error && <p class="notice" data-state="error">{error}</p>}
-          {!error && products.length === 0 && (
-            <div class="empty-shop">
-              <h2>No hay productos todavia</h2>
-              <p>Crea productos en WordPress o ejecuta el seed demo de la plantilla.</p>
-            </div>
-          )}
-          {products.length > 0 && (
-            <>
-              <div class="product-grid" id="product-grid">
-                {products.map((product) => (
-                  <div class="product-page-item">
-                    <ProductCard product={product} />
-                  </div>
-                ))}
-              </div>
-              <Pagination id="shop-pagination" label="Paginacion de tienda" />
-            </>
-          )}
+          <p class="notice" id="shop-error" data-state="error" hidden></p>
+          <div class="empty-shop" id="shop-empty" hidden>
+            <h2>No hay productos todavia</h2>
+            <p>Crea productos en WordPress o ejecuta el seed demo de la plantilla.</p>
+          </div>
+          <div class="product-grid skeleton-grid" id="shop-skeleton" aria-hidden="true">
+            {Array.from({ length: 6 }).map(() => (
+              <article class="product-skeleton">
+                <div class="skeleton-media"></div>
+                <div class="skeleton-body">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+              </article>
+            ))}
+          </div>
+          <div class="product-grid" id="product-grid"></div>
+          <Pagination id="shop-pagination" label="Paginacion de tienda" />
         </section>
       </main>
     ) : (
@@ -74,11 +55,86 @@ if (siteConfig.features.shop) {
 
   <script>
     import { setupLocalPagination } from '../../lib/pagination';
-    import { tcgApi } from '../../lib/tcg-api';
+    import { formatStorePrice, shopApi } from '../../lib/shop';
+    import { addWishlistItem, readWishlist, removeWishlistItem } from '../../lib/wishlist';
 
     const _cartKey = 'tcg.cart.items';
     const _wishlistKey = 'tcg.wishlist.items';
     const _loginUrl = `/login?next=${encodeURIComponent('/tienda')}`;
+    const _shopCacheKey = 'tcg.shop.products.cache';
+    const _shopCacheTtl = 30_000;
+    const grid = document.querySelector('#product-grid');
+    const skeleton = document.querySelector('#shop-skeleton');
+    const empty = document.querySelector('#shop-empty');
+    const error = document.querySelector('#shop-error');
+    const pagerRoot = document.querySelector('#shop-pagination');
+    let pager = null;
+    let wishlistIds = null;
+
+    const _escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, (char) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#039;',
+    }[char]));
+
+    const _htmlToText = (value) => {
+      const template = document.createElement('template');
+      template.innerHTML = String(value || '');
+      return template.content.textContent || '';
+    };
+
+    const _readProductsCache = () => {
+      try {
+        const cache = JSON.parse(sessionStorage.getItem(_shopCacheKey) || 'null');
+        return cache?.expiresAt > Date.now() && Array.isArray(cache.products) ? cache.products : null;
+      } catch {
+        return null;
+      }
+    };
+
+    const _writeProductsCache = (products) => {
+      try {
+        sessionStorage.setItem(_shopCacheKey, JSON.stringify({
+          products,
+          expiresAt: Date.now() + _shopCacheTtl,
+        }));
+      } catch {}
+    };
+
+    const _productTemplate = (product) => {
+      const image = product.images?.[0];
+      const price = formatStorePrice(product.prices);
+      const description = _escapeHtml(_htmlToText(product.short_description || product.description) || 'Producto preparado para el catalogo.');
+      const safeName = _escapeHtml(product.name);
+      const safeSlug = encodeURIComponent(product.slug || '');
+      const safeImage = _escapeHtml(image?.src || '');
+
+      return `
+        <div class="product-page-item">
+          <article class="product-card">
+            <a class="media" href="/producto?slug=${safeSlug}" aria-label="Ver ${safeName}">
+              ${image ? `<img src="${safeImage}" alt="${_escapeHtml(image.alt || product.name)}" loading="lazy">` : `<span>${safeName.slice(0, 1).toUpperCase()}</span>`}
+            </a>
+            <div class="body">
+              <div>
+                <h2><a href="/producto?slug=${safeSlug}">${safeName}</a></h2>
+                <p>${description}</p>
+              </div>
+              <div class="actions">
+                <strong>${price}</strong>
+                <button class="button button-secondary add-to-cart" type="button" data-id="${product.id}" data-slug="${_escapeHtml(product.slug)}" data-name="${safeName}" data-price="${price}" data-image="${safeImage}">Anadir</button>
+                <button class="wishlist-toggle add-to-wishlist" type="button" aria-label="Guardar ${safeName} en wishlist" aria-pressed="false" data-id="${product.id}">
+                  <svg class="heart-empty" xmlns="http://www.w3.org/2000/svg" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19.5 12.6 12 20l-7.5-7.4A5 5 0 0 1 12 6a5 5 0 0 1 7.5 6.6Z"/></svg>
+                  <svg class="heart-filled" xmlns="http://www.w3.org/2000/svg" width="19" height="19" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21.2 4.1 13.4A5.55 5.55 0 0 1 12 5.6a5.55 5.55 0 0 1 7.9 7.8L12 21.2Z"/></svg>
+                </button>
+              </div>
+            </div>
+          </article>
+        </div>
+      `;
+    };
 
     const _addCartItem = (item) => {
       try {
@@ -95,7 +151,8 @@ if (siteConfig.features.shop) {
       } catch {}
     };
 
-    document.querySelectorAll('.add-to-cart').forEach((button) => {
+    const _bindProductActions = () => {
+      document.querySelectorAll('.add-to-cart').forEach((button) => {
       button.addEventListener('click', () => {
         _addCartItem({
           id: Number(button.dataset.id),
@@ -109,59 +166,148 @@ if (siteConfig.features.shop) {
         window.setTimeout(() => { button.textContent = 'Anadir'; }, 1200);
       });
     });
+      document.querySelectorAll('.add-to-wishlist').forEach((button) => {
+        button.addEventListener('click', async () => {
+          if (!_requireWishlistAuth()) return;
+          await _toggleWishlist(button);
+        });
+      });
+    };
 
-    const _requireWishlistAuth = async () => {
+    const _setWishlistButtonState = (button, isSaved) => {
+      button.setAttribute('aria-pressed', isSaved ? 'true' : 'false');
+      button.setAttribute('aria-label', isSaved ? 'Quitar de wishlist' : 'Guardar en wishlist');
+      button.classList.toggle('is-active', isSaved);
+      button.classList.remove('is-error');
+    };
+
+    const _syncWishlistButtons = (productId, isSaved) => {
+      document.querySelectorAll(`.add-to-wishlist[data-id="${productId}"]`).forEach((button) => {
+        _setWishlistButtonState(button, isSaved);
+      });
+    };
+
+    const _hydrateWishlistButtons = async () => {
       try {
-        const response = await fetch(tcgApi.me, { credentials: 'include' });
-        if (!response.ok) throw new Error('Guest');
-        return true;
+        const items = await readWishlist();
+        wishlistIds = new Set(items.map((item) => Number(item.product_id)));
+        document.querySelectorAll('.add-to-wishlist').forEach((button) => {
+          _setWishlistButtonState(button, wishlistIds.has(Number(button.dataset.id)));
+        });
       } catch {
+        wishlistIds = null;
         try {
           localStorage.removeItem('tcg.authenticated');
           localStorage.removeItem('tcg.user.summary');
           localStorage.removeItem(_wishlistKey);
         } catch {}
-        window.location.assign(_loginUrl);
-        return false;
       }
     };
 
-    document.querySelectorAll('.add-to-wishlist').forEach((button) => {
-      button.addEventListener('click', async () => {
-        button.disabled = true;
-        const isAuthenticated = await _requireWishlistAuth();
-        if (!isAuthenticated) return;
+    const _requireWishlistAuth = () => {
+      if (wishlistIds instanceof Set) return true;
 
-        try {
-          const raw = localStorage.getItem(_wishlistKey);
-          const items = raw ? JSON.parse(raw) : [];
-          const item = {
-            id: Number(button.dataset.id),
-            slug: button.dataset.slug || '',
-            name: button.dataset.name || 'Producto',
-            price: button.dataset.price || '',
-            image: button.dataset.image || undefined,
-          };
-          const exists = items.some((current) => current.id === item.id);
-          const updated = exists ? items.filter((current) => current.id !== item.id) : [...items, item];
-          localStorage.setItem(_wishlistKey, JSON.stringify(updated));
-          window.dispatchEvent(new CustomEvent('tcg:wishlist-updated'));
-        } catch {}
+      try {
+        if (localStorage.getItem('tcg.authenticated') === '1') return true;
+      } catch {}
 
-        button.textContent = 'Guardado';
-        window.setTimeout(() => {
-          button.textContent = 'Wishlist';
-          button.disabled = false;
-        }, 1200);
+      window.location.assign(_loginUrl);
+      return false;
+    };
+
+    const _toggleWishlist = async (button) => {
+      if (!(wishlistIds instanceof Set)) {
+        await _hydrateWishlistButtons();
+      }
+
+      const productId = Number(button.dataset.id);
+      const wasSaved = wishlistIds instanceof Set && wishlistIds.has(productId);
+
+      button.disabled = true;
+
+      try {
+        if (wasSaved) {
+          await removeWishlistItem(productId);
+          wishlistIds?.delete(productId);
+        } else {
+          await addWishlistItem(productId);
+          if (!(wishlistIds instanceof Set)) wishlistIds = new Set();
+          wishlistIds.add(productId);
+        }
+
+        _setWishlistButtonState(button, !wasSaved);
+      } catch {
+        if (wishlistIds === null) {
+          try {
+            localStorage.removeItem('tcg.authenticated');
+            localStorage.removeItem('tcg.user.summary');
+          } catch {}
+        }
+        button.classList.add('is-error');
+        button.setAttribute('aria-label', 'No se pudo actualizar la wishlist');
+        window.setTimeout(() => button.classList.remove('is-error'), 1400);
+      } finally {
+        button.disabled = false;
+      }
+    };
+
+    window.addEventListener('tcg:wishlist-updated', (event) => {
+      const detail = event.detail || {};
+      const productId = Number(detail.productId);
+      if (!productId || !detail.action) return;
+
+      if (!(wishlistIds instanceof Set)) wishlistIds = new Set();
+      if (detail.action === 'added') wishlistIds.add(productId);
+      if (detail.action === 'removed') wishlistIds.delete(productId);
+
+      _syncWishlistButtons(productId, detail.action === 'added');
+    });
+
+    const _setupPagination = () => {
+      pager = setupLocalPagination({
+        root: document,
+        itemSelector: '.product-page-item',
+        pagination: pagerRoot,
+        perPage: 12,
       });
-    });
+      pager.refresh();
+    };
 
-    setupLocalPagination({
-      root: document,
-      itemSelector: '.product-page-item',
-      pagination: document.querySelector('#shop-pagination'),
-      perPage: 12,
-    });
+    const _renderProducts = (products) => {
+      if (skeleton) skeleton.hidden = true;
+      if (error) error.hidden = true;
+      if (empty) empty.hidden = products.length > 0;
+      if (grid) grid.innerHTML = products.map(_productTemplate).join('');
+      _bindProductActions();
+      _setupPagination();
+      _hydrateWishlistButtons();
+    };
+
+    const _loadProducts = async () => {
+      const cached = _readProductsCache();
+      if (cached) {
+        _renderProducts(cached);
+        return;
+      }
+
+      try {
+        const response = await fetch(`${shopApi.products}?per_page=48`);
+        if (!response.ok) throw new Error(`WooCommerce respondio con ${response.status}`);
+        const products = await response.json();
+        _writeProductsCache(products);
+        _renderProducts(products);
+      } catch (caught) {
+        if (skeleton) skeleton.hidden = true;
+        if (grid) grid.innerHTML = '';
+        if (empty) empty.hidden = true;
+        if (error) {
+          error.textContent = caught instanceof Error ? caught.message : 'No se pudo cargar la tienda.';
+          error.hidden = false;
+        }
+      }
+    };
+
+    _loadProducts();
   </script>
 </BaseLayout>
 
@@ -206,6 +352,155 @@ if (siteConfig.features.shop) {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 16px;
+  }
+
+  .product-grid[hidden],
+  .empty-shop[hidden],
+  .notice[hidden] {
+    display: none;
+  }
+
+  :global(.product-card) {
+    display: grid;
+    overflow: hidden;
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-item);
+    background: var(--color-canvas);
+  }
+
+  :global(.product-card .media) {
+    display: grid;
+    aspect-ratio: 4 / 3;
+    place-items: center;
+    background: var(--color-surface-strong);
+  }
+
+  :global(.product-card .media img) {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  :global(.product-card .media span) {
+    color: var(--color-primary);
+    font-size: 3rem;
+    font-weight: 800;
+  }
+
+  :global(.product-card .body) {
+    display: grid;
+    gap: 20px;
+    padding: 18px;
+  }
+
+  :global(.product-card h2) {
+    margin: 0;
+    font-size: 1.12rem;
+  }
+
+  :global(.product-card p) {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    min-height: 48px;
+    margin: 8px 0 0;
+    color: var(--color-body);
+    line-height: 1.5;
+  }
+
+  :global(.product-card .actions) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 12px;
+  }
+
+  :global(.product-card strong) {
+    font-size: 1rem;
+  }
+
+  :global(.product-card .wishlist-toggle) {
+    appearance: none;
+    display: inline-grid;
+    width: 38px;
+    height: 38px;
+    place-items: center;
+    padding: 0;
+    border: 1px solid var(--color-hairline);
+    border-radius: 50%;
+    background: var(--color-canvas);
+    color: var(--color-body);
+    cursor: pointer;
+  }
+
+  :global(.product-card .wishlist-toggle:hover),
+  :global(.product-card .wishlist-toggle[aria-pressed="true"]),
+  :global(.product-card .wishlist-toggle.is-active) {
+    border-color: #f2b8c0;
+    background: #fff5f6;
+    color: var(--color-danger);
+  }
+
+  :global(.product-card .wishlist-toggle .heart-filled),
+  :global(.product-card .wishlist-toggle[aria-pressed="true"] .heart-empty),
+  :global(.product-card .wishlist-toggle.is-active .heart-empty) {
+    display: none;
+  }
+
+  :global(.product-card .wishlist-toggle[aria-pressed="true"] .heart-filled),
+  :global(.product-card .wishlist-toggle.is-active .heart-filled) {
+    display: block;
+  }
+
+  :global(.product-card .wishlist-toggle.is-error) {
+    border-color: var(--color-danger);
+    background: #fde8e8;
+    color: var(--color-danger);
+  }
+
+  .product-skeleton {
+    overflow: hidden;
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-item);
+    background: var(--color-canvas);
+  }
+
+  .skeleton-media {
+    aspect-ratio: 4 / 3;
+    background: linear-gradient(90deg, var(--color-surface-strong), #f9fafb, var(--color-surface-strong));
+    background-size: 200% 100%;
+    animation: skeleton-pulse 1.2s ease-in-out infinite;
+  }
+
+  .skeleton-body {
+    display: grid;
+    gap: 12px;
+    padding: 18px;
+  }
+
+  .skeleton-body span {
+    height: 14px;
+    border-radius: 999px;
+    background: var(--color-surface-strong);
+  }
+
+  .skeleton-body span:first-child {
+    width: 68%;
+  }
+
+  .skeleton-body span:nth-child(2) {
+    width: 92%;
+  }
+
+  .skeleton-body span:nth-child(3) {
+    width: 42%;
+  }
+
+  @keyframes skeleton-pulse {
+    0% { background-position: 100% 0; }
+    100% { background-position: -100% 0; }
   }
 
   .empty-shop,

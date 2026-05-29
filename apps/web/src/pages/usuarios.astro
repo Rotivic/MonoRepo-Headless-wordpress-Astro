@@ -29,6 +29,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         </form>
 
         <p class="status-message" id="users-status" aria-live="polite">Cargando usuarios...</p>
+        <div id="users-skeleton" class="users-skeleton" aria-hidden="true">
+          <article><span></span><div><span></span><span></span></div><span></span><span></span><span></span></article>
+          <article><span></span><div><span></span><span></span></div><span></span><span></span><span></span></article>
+          <article><span></span><div><span></span><span></span></div><span></span><span></span><span></span></article>
+        </div>
         <div class="users-list" id="users-list"></div>
         <Pagination id="users-pagination" label="Paginacion de usuarios" />
       </section>
@@ -39,6 +44,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const form = document.querySelector('#users-search');
     const list = document.querySelector('#users-list');
     const status = document.querySelector('#users-status');
+    const skeleton = document.querySelector('#users-skeleton');
     const pagination = document.querySelector('#users-pagination');
     const prev = pagination?.querySelector('[data-pagination-prev]');
     const next = pagination?.querySelector('[data-pagination-next]');
@@ -62,6 +68,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     };
 
     const renderUsers = (users, meta) => {
+      if (skeleton) skeleton.hidden = true;
       if (!users.length) {
         list.innerHTML = '';
         setStatus('No hay usuarios para mostrar.');
@@ -87,6 +94,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
     const loadUsers = async (search = currentSearch, page = currentPage) => {
       setStatus('Cargando usuarios...');
+      if (skeleton) skeleton.hidden = false;
+      if (list) list.innerHTML = '';
       const url = new URL(usersUrl);
       if (search) url.searchParams.set('search', search);
       url.searchParams.set('page', String(page));
@@ -98,6 +107,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         if (!response.ok) throw new Error(payload.message || 'No se pudieron cargar los usuarios.');
         renderUsers(payload.data || [], payload.meta);
       } catch (error) {
+        if (skeleton) skeleton.hidden = true;
         list.innerHTML = '';
         if (pagination) pagination.hidden = true;
         setStatus(error.message, 'error');
@@ -190,6 +200,59 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   .users-list {
     display: grid;
     gap: 10px;
+  }
+
+  .users-skeleton {
+    display: grid;
+    gap: 10px;
+  }
+
+  .users-skeleton[hidden] {
+    display: none;
+  }
+
+  .users-skeleton article {
+    display: grid;
+    grid-template-columns: 40px 1fr 80px 80px 74px;
+    gap: 12px;
+    align-items: center;
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-item);
+    padding: 12px;
+  }
+
+  .users-skeleton span {
+    display: block;
+    height: 13px;
+    border-radius: 999px;
+    background: var(--color-surface-strong);
+  }
+
+  .users-skeleton article > span:first-child {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: linear-gradient(90deg, var(--color-surface-strong), #f9fafb, var(--color-surface-strong));
+    background-size: 200% 100%;
+    animation: users-skeleton-pulse 1.2s ease-in-out infinite;
+  }
+
+  .users-skeleton div {
+    display: grid;
+    gap: 8px;
+  }
+
+  .users-skeleton div span:first-child {
+    width: 70%;
+  }
+
+  .users-skeleton div span:last-child {
+    width: 88%;
+  }
+
+  @keyframes users-skeleton-pulse {
+    0% { background-position: 100% 0; }
+    100% { background-position: -100% 0; }
   }
 
   :global(.user-row) {

@@ -12,8 +12,22 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
   {
     siteConfig.features.shop ? (
-      <main class="sales-view" id="backoffice-page" hidden>
-        <section class="page-shell sales-shell">
+      <main class="sales-view">
+        <section class="page-shell sales-shell" id="sales-loading">
+          <div>
+            <BackButton fallback="/admin" />
+            <p class="eyebrow">Ventas</p>
+            <h1>Panel de ventas</h1>
+            <p class="lede">Validando permisos...</p>
+          </div>
+          <section class="sales-panel sales-skeleton">
+            <div class="metric"><span></span><strong></strong></div>
+            <div class="metric"><span></span><strong></strong></div>
+            <div class="metric"><span></span><strong></strong></div>
+            <div class="chart-card"><span></span><span></span></div>
+          </section>
+        </section>
+        <section class="page-shell sales-shell" id="backoffice-page" hidden>
           <div>
             <BackButton fallback="/admin" />
             <p class="eyebrow">Ventas</p>
@@ -63,12 +77,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
   <script define:vars={{ meUrl: tcgApi.me }}>
     const page = document.querySelector('#backoffice-page');
+    const loading = document.querySelector('#sales-loading');
 
     fetch(meUrl, { credentials: 'include' })
       .then(async (response) => {
         if (!response.ok) throw new Error('Debes iniciar sesion.');
         const payload = await response.json();
         if (!payload.data?.can_access_backoffice) throw new Error('Sin permisos.');
+        if (loading) loading.hidden = true;
         if (page) page.hidden = false;
       })
       .catch(() => {
@@ -120,6 +136,42 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     border-radius: var(--radius-item);
     background: var(--color-canvas);
     padding: 22px;
+  }
+
+  #sales-loading[hidden],
+  #backoffice-page[hidden] {
+    display: none;
+  }
+
+  .sales-skeleton span,
+  .sales-skeleton strong {
+    display: block;
+    min-height: 14px;
+    border-radius: 999px;
+    background: var(--color-surface-strong);
+  }
+
+  .sales-skeleton .metric strong {
+    width: 64%;
+    min-height: 22px;
+  }
+
+  .sales-skeleton .chart-card span:first-child {
+    width: 34%;
+    min-height: 16px;
+  }
+
+  .sales-skeleton .chart-card span:last-child {
+    min-height: 120px;
+    border-radius: var(--radius-item);
+    background: linear-gradient(90deg, var(--color-surface-strong), #f9fafb, var(--color-surface-strong));
+    background-size: 200% 100%;
+    animation: sales-skeleton-pulse 1.2s ease-in-out infinite;
+  }
+
+  @keyframes sales-skeleton-pulse {
+    0% { background-position: 100% 0; }
+    100% { background-position: -100% 0; }
   }
 
   .metric {

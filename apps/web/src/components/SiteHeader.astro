@@ -84,6 +84,10 @@ const { active = 'home' } = Astro.props;
         </button>
       </div>
       <div class="canvas-body">
+        <div class="canvas-loading" id="canvas-loading" hidden aria-hidden="true">
+          <article><span></span><div><span></span><span></span></div><span></span></article>
+          <article><span></span><div><span></span><span></span></div><span></span></article>
+        </div>
         <ul class="canvas-items" id="canvas-items" aria-live="polite"></ul>
         <div class="canvas-empty" id="canvas-empty">
           <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
@@ -101,7 +105,7 @@ const { active = 'home' } = Astro.props;
   </>
 )}
 
-<script is:inline define:vars={{ meUrl: tcgApi.me, logoutUrl: tcgApi.logout, shopEnabled: siteConfig.features.shop }}>
+<script is:inline define:vars={{ meUrl: tcgApi.me, logoutUrl: tcgApi.logout, wishlistUrl: tcgApi.wishlist, shopEnabled: siteConfig.features.shop }}>
   const navActions = document.querySelector('.nav-actions');
   const guestItems = document.querySelectorAll('.session-guest');
   const userMenu = document.querySelector('#user-menu');
@@ -145,6 +149,14 @@ const { active = 'home' } = Astro.props;
     if (!csrf) return {};
     return { 'X-TCG-CSRF': decodeURIComponent(csrf).split(':')[0] };
   };
+
+  const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;',
+  }[char]));
 
   const clearLocalSessionData = () => {
     try {
@@ -231,8 +243,85 @@ const { active = 'home' } = Astro.props;
 
   // --- Cart ---
   const cartKey = 'tcg.cart.items';
+  const loginCartUrl = '/login?next=%2Fcarrito';
   const readCart = () => {
     try { return JSON.parse(localStorage.getItem(cartKey) || '[]'); } catch { return []; }
+  };
+
+  let canvasWishlistIds = null;
+  const ensureCanvasWishlist = async () => {
+    if (canvasWishlistIds instanceof Set) return canvasWishlistIds;
+
+    try {
+      const response = await fetch(wishlistUrl, { credentials: 'include' });
+      if (!response.ok) throw new Error('Guest');
+      const payload = await response.json();
+      canvasWishlistIds = new Set((payload.data || []).map((item) => Number(item.product_id)));
+    } catch {
+      canvasWishlistIds = null;
+    }
+
+    return canvasWishlistIds;
+  };
+
+  const saveCanvasWishlist = async (button) => {
+    const productId = Number(button.dataset.id);
+
+    try {
+      if (localStorage.getItem(authKey) !== '1') {
+        window.location.assign(loginCartUrl);
+        return;
+      }
+    } catch {
+      window.location.assign(loginCartUrl);
+      return;
+    }
+
+    button.disabled = true;
+
+    try {
+      const wishlistIds = await ensureCanvasWishlist();
+      const wasSaved = wishlistIds instanceof Set && wishlistIds.has(productId);
+      const response = await fetch(wasSaved ? `${wishlistUrl}/${productId}` : wishlistUrl, {
+        method: wasSaved ? 'DELETE' : 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+        body: wasSaved ? undefined : JSON.stringify({ product_id: productId }),
+      });
+
+      if (response.status === 401 || response.status === 403) {
+        window.location.assign(loginCartUrl);
+        return;
+      }
+
+      if (!response.ok) throw new Error('Wishlist failed');
+
+      if (!(canvasWishlistIds instanceof Set)) canvasWishlistIds = new Set();
+
+      if (wasSaved) {
+        canvasWishlistIds.delete(productId);
+        button.setAttribute('aria-pressed', 'false');
+        button.classList.remove('is-active');
+        button.setAttribute('aria-label', 'Guardar en wishlist');
+        window.dispatchEvent(new CustomEvent('tcg:wishlist-updated', {
+          detail: { productId, action: 'removed' },
+        }));
+      } else {
+        canvasWishlistIds.add(productId);
+        button.setAttribute('aria-pressed', 'true');
+        button.classList.add('is-active');
+        button.setAttribute('aria-label', 'Guardado en wishlist');
+        window.dispatchEvent(new CustomEvent('tcg:wishlist-updated', {
+          detail: { productId, action: 'added' },
+        }));
+      }
+    } catch {
+      button.setAttribute('aria-label', 'No se pudo actualizar la wishlist');
+      button.classList.add('is-error');
+      window.setTimeout(() => button.classList.remove('is-error'), 1400);
+    } finally {
+      button.disabled = false;
+    }
   };
 
   const badge = document.querySelector('#cart-badge');
@@ -241,6 +330,8 @@ const { active = 'home' } = Astro.props;
   const canvasItems = document.querySelector('#canvas-items');
   const canvasEmpty = document.querySelector('#canvas-empty');
   const canvasFooter = document.querySelector('#canvas-footer');
+  const canvasLoading = document.querySelector('#canvas-loading');
+  let canvasRenderId = 0;
 
   const updateBadge = () => {
     if (!badge) return;
@@ -249,27 +340,67 @@ const { active = 'home' } = Astro.props;
     badge.classList.toggle('visible', total > 0);
   };
 
-  const renderCanvas = () => {
+  const setCanvasLoading = (isLoading) => {
+    if (canvasLoading) canvasLoading.hidden = !isLoading;
+    if (canvasItems) canvasItems.hidden = isLoading;
+    if (canvasEmpty) canvasEmpty.style.display = isLoading ? 'none' : canvasEmpty.style.display;
+    if (canvasFooter) canvasFooter.style.display = isLoading ? 'none' : canvasFooter.style.display;
+  };
+
+  const renderCanvas = async () => {
+    const renderId = ++canvasRenderId;
     const items = readCart();
     const hasItems = items.length > 0;
+
+    setCanvasLoading(true);
+    if (canvasItems) canvasItems.innerHTML = '';
+
+    const [wishlistIds] = await Promise.all([
+      ensureCanvasWishlist(),
+      new Promise((resolve) => window.setTimeout(resolve, 160)),
+    ]);
+
+    if (renderId !== canvasRenderId) return;
+
+    setCanvasLoading(false);
     if (canvasEmpty) canvasEmpty.style.display = hasItems ? 'none' : 'flex';
     if (canvasFooter) canvasFooter.style.display = hasItems ? 'flex' : 'none';
     if (!canvasItems) return;
+    canvasItems.hidden = false;
 
-    canvasItems.innerHTML = items.map((item) => `
-      <li class="canvas-item">
-        <div class="canvas-item-media">
-          ${item.image ? '<img src="' + item.image + '" alt="" loading="lazy">' : '<span aria-hidden="true">' + (item.name || '?').slice(0, 1).toUpperCase() + '</span>'}
-        </div>
-        <div class="canvas-item-info">
-          <strong>${item.name}</strong>
-          <p>${item.price} &middot; &times;${item.quantity}</p>
-        </div>
-        <button class="canvas-remove" type="button" data-id="${item.id}" aria-label="Quitar ${item.name}">
-          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
-      </li>
-    `).join('');
+    canvasItems.innerHTML = items.map((item) => {
+      const id = Number(item.id);
+      const name = escapeHtml(item.name || 'Producto');
+      const price = escapeHtml(item.price || '-');
+      const image = escapeHtml(item.image);
+      const quantity = Number(item.quantity || 1);
+      const saved = wishlistIds instanceof Set && wishlistIds.has(id);
+
+      return `
+        <li class="canvas-item">
+          <div class="canvas-item-media">
+            ${item.image ? '<img src="' + image + '" alt="" loading="lazy">' : '<span aria-hidden="true">' + name.slice(0, 1).toUpperCase() + '</span>'}
+          </div>
+          <div class="canvas-item-info">
+            <strong>${name}</strong>
+            <p>${price} &middot; &times;${quantity}</p>
+          </div>
+          <div class="canvas-item-actions">
+            <button class="canvas-wishlist ${saved ? 'is-active' : ''}" type="button" data-id="${id}" aria-pressed="${saved ? 'true' : 'false'}" aria-label="Guardar ${name} en wishlist">
+              <svg class="heart-empty" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19.5 12.6 12 20l-7.5-7.4A5 5 0 0 1 12 6a5 5 0 0 1 7.5 6.6Z"/></svg>
+              <svg class="heart-filled" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21.2 4.1 13.4A5.55 5.55 0 0 1 12 5.6a5.55 5.55 0 0 1 7.9 7.8L12 21.2Z"/></svg>
+            </button>
+            <button class="canvas-remove" type="button" data-id="${id}" aria-label="Quitar ${name}">
+              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+        </li>
+      `;
+    }).join('');
+
+    canvasItems.querySelectorAll('.canvas-wishlist').forEach((btn) => {
+      btn.addEventListener('click', () => saveCanvasWishlist(btn));
+    });
 
     canvasItems.querySelectorAll('.canvas-remove').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -302,6 +433,20 @@ const { active = 'home' } = Astro.props;
   backdrop?.addEventListener('click', closeCanvas);
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCanvas(); });
   window.addEventListener('tcg:cart-updated', () => { updateBadge(); if (canvas?.classList.contains('open')) renderCanvas(); });
+  window.addEventListener('tcg:wishlist-updated', (event) => {
+    const detail = event.detail || {};
+    const productId = Number(detail.productId);
+
+    if (productId && detail.action) {
+      if (!(canvasWishlistIds instanceof Set)) canvasWishlistIds = new Set();
+      if (detail.action === 'added') canvasWishlistIds.add(productId);
+      if (detail.action === 'removed') canvasWishlistIds.delete(productId);
+    } else {
+      canvasWishlistIds = null;
+    }
+
+    if (canvas?.classList.contains('open')) renderCanvas();
+  });
 
   updateBadge();
 </script>
@@ -661,6 +806,120 @@ const { active = 'home' } = Astro.props;
     margin: 0;
     font-size: 0.82rem;
     color: var(--color-body);
+  }
+
+  .canvas-loading {
+    display: grid;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .canvas-loading[hidden] {
+    display: none;
+  }
+
+  .canvas-loading article {
+    display: grid;
+    grid-template-columns: 52px 1fr 64px;
+    gap: 12px;
+    align-items: center;
+    border-bottom: 1px solid var(--color-hairline);
+    padding-bottom: 12px;
+  }
+
+  .canvas-loading span {
+    display: block;
+    border-radius: 999px;
+    background: var(--color-surface-strong);
+  }
+
+  .canvas-loading article > span,
+  .canvas-loading div span {
+    background: linear-gradient(90deg, var(--color-surface-strong), #f9fafb, var(--color-surface-strong));
+    background-size: 200% 100%;
+    animation: canvas-skeleton-pulse 1.2s ease-in-out infinite;
+  }
+
+  .canvas-loading article > span:first-child {
+    width: 52px;
+    height: 52px;
+    border-radius: 8px;
+  }
+
+  .canvas-loading div {
+    display: grid;
+    gap: 8px;
+  }
+
+  .canvas-loading div span:first-child {
+    width: 74%;
+    height: 13px;
+  }
+
+  .canvas-loading div span:last-child {
+    width: 42%;
+    height: 11px;
+  }
+
+  .canvas-loading article > span:last-child {
+    width: 64px;
+    height: 28px;
+  }
+
+  @keyframes canvas-skeleton-pulse {
+    0% { background-position: 100% 0; }
+    100% { background-position: -100% 0; }
+  }
+
+  :global(.canvas-item-actions) {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  :global(.canvas-wishlist) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: 1px solid var(--color-hairline);
+    border-radius: 50%;
+    background: var(--color-canvas);
+    color: var(--color-body);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+  }
+
+  :global(.canvas-wishlist:hover),
+  :global(.canvas-wishlist[aria-pressed="true"]),
+  :global(.canvas-wishlist.is-active) {
+    border-color: #f2b8c0;
+    background: #fff5f6;
+    color: var(--color-danger);
+  }
+
+  :global(.canvas-wishlist .heart-filled),
+  :global(.canvas-wishlist[aria-pressed="true"] .heart-empty),
+  :global(.canvas-wishlist.is-active .heart-empty) {
+    display: none;
+  }
+
+  :global(.canvas-wishlist[aria-pressed="true"] .heart-filled),
+  :global(.canvas-wishlist.is-active .heart-filled) {
+    display: block;
+  }
+
+  :global(.canvas-wishlist:disabled) {
+    cursor: wait;
+    opacity: 0.7;
+  }
+
+  :global(.canvas-wishlist.is-error) {
+    border-color: var(--color-danger);
+    background: #fde8e8;
+    color: var(--color-danger);
   }
 
   :global(.canvas-remove) {

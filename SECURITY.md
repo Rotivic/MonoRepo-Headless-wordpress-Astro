@@ -28,6 +28,7 @@ Este proyecto separa dos modos de autenticacion:
 
 - Toda ruta REST privada debe usar `require_auth`.
 - Toda ruta REST admin debe usar `require_admin`.
+- Los modulos de dominio propios deben vivir dentro del mu-plugin `tcg-api` y registrar endpoints bajo `/wp-json/tcg/v1`.
 - Las vistas de backoffice frontend deben comprobar `can_access_backoffice`; los datos sensibles siempre deben estar protegidos tambien en backend.
 - Las rutas publicas no deben revelar si un email existe salvo que sea estrictamente necesario.
 - Las acciones con estado desde Astro deben enviar `X-TCG-CSRF` usando `csrfHeaders()`.

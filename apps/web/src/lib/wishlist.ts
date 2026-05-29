@@ -1,29 +1,56 @@
-const wishlistKey = 'tcg.wishlist.items';
+import { csrfHeaders } from './security';
+import { tcgApi } from './tcg-api';
 
 export interface WishlistItem {
-  id: number;
+  product_id: number;
   slug: string;
   name: string;
   price?: string;
   image?: string;
+  is_in_stock?: boolean;
+  permalink?: string;
+  created_at?: string;
 }
 
-export function readWishlist(): WishlistItem[] {
-  try {
-    const raw = window.localStorage.getItem(wishlistKey);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
+export type WishlistEventAction = 'added' | 'removed';
+
+export function dispatchWishlistUpdated(productId: number, action: WishlistEventAction) {
+  window.dispatchEvent(new CustomEvent('tcg:wishlist-updated', {
+    detail: { productId, action },
+  }));
+}
+
+async function wishlistJson<T>(url: string, options: RequestInit = {}): Promise<T> {
+  const response = await fetch(url, {
+    credentials: 'include',
+    headers: csrfHeaders({ 'Content-Type': 'application/json', ...(options.headers || {}) }),
+    ...options,
+  });
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(data.message || 'No se pudo actualizar la wishlist.');
   }
+
+  return data;
 }
 
-export function writeWishlist(items: WishlistItem[]) {
-  window.localStorage.setItem(wishlistKey, JSON.stringify(items));
-  window.dispatchEvent(new CustomEvent('tcg:wishlist-updated'));
+export async function readWishlist(): Promise<WishlistItem[]> {
+  const payload = await wishlistJson<{ data: WishlistItem[] }>(tcgApi.wishlist);
+  return payload.data || [];
 }
 
-export function toggleWishlistItem(item: WishlistItem) {
-  const items = readWishlist();
-  const exists = items.some((current) => current.id === item.id);
-  writeWishlist(exists ? items.filter((current) => current.id !== item.id) : [...items, item]);
+export async function addWishlistItem(productId: number): Promise<WishlistItem> {
+  const payload = await wishlistJson<{ data: WishlistItem }>(tcgApi.wishlist, {
+    method: 'POST',
+    body: JSON.stringify({ product_id: productId }),
+  });
+
+  dispatchWishlistUpdated(productId, 'added');
+  return payload.data;
+}
+
+export async function removeWishlistItem(productId: number): Promise<void> {
+  await wishlistJson(tcgApi.wishlistItem(productId), { method: 'DELETE' });
+  dispatchWishlistUpdated(productId, 'removed');
 }

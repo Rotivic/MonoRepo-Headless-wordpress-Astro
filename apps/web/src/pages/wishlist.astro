@@ -3,7 +3,6 @@ import SiteHeader from '../components/SiteHeader.astro';
 import Pagination from '../components/Pagination.astro';
 import { siteConfig } from '../config/site';
 import BaseLayout from '../layouts/BaseLayout.astro';
-import { tcgApi } from '../lib/tcg-api';
 ---
 
 <BaseLayout title={`Wishlist | ${siteConfig.name}`}>
@@ -13,11 +12,32 @@ import { tcgApi } from '../lib/tcg-api';
       <div>
         <p class="eyebrow">Cuenta</p>
         <h1>Wishlist</h1>
-        <p class="lede">Tus favoritos quedan ligados a tu cuenta. La persistencia en WordPress queda preparada para el siguiente sprint.</p>
+        <p class="lede">Tus favoritos quedan ligados a tu cuenta y se sincronizan desde la API privada de WordPress.</p>
       </div>
-      <section class="list-panel">
+      <section class="wishlist-panel" aria-live="polite">
+        <div class="panel-head">
+          <div>
+            <p class="panel-eyebrow">Favoritos</p>
+            <h2>Guardados</h2>
+          </div>
+          <a class="button button-secondary" href="/tienda">Ir a tienda</a>
+        </div>
+        <p id="wishlist-status" class="status-message">Cargando favoritos...</p>
+        <div id="wishlist-skeleton" class="wishlist-skeleton" aria-hidden="true">
+          {Array.from({ length: 3 }).map(() => (
+            <article class="wishlist-skeleton-item">
+              <span></span>
+              <div>
+                <span></span>
+                <span></span>
+              </div>
+              <span></span>
+              <span></span>
+            </article>
+          ))}
+        </div>
         <div id="wishlist-items" class="items"></div>
-        <div id="wishlist-empty" class="empty">
+        <div id="wishlist-empty" class="empty" hidden>
           <h2>No hay favoritos</h2>
           <p>Anade productos desde la tienda para probar esta vista.</p>
           <a class="button button-primary" href="/tienda">Ir a tienda</a>
@@ -27,68 +47,104 @@ import { tcgApi } from '../lib/tcg-api';
     </section>
   </main>
 
-  <script define:vars={{ meUrl: tcgApi.me }}>
+  <script>
     import { setupLocalPagination } from '../lib/pagination';
-    import { readWishlist, writeWishlist } from '../lib/wishlist';
+    import { readWishlist, removeWishlistItem } from '../lib/wishlist';
 
     const root = document.querySelector('#wishlist-items');
     const empty = document.querySelector('#wishlist-empty');
+    const status = document.querySelector('#wishlist-status');
+    const skeleton = document.querySelector('#wishlist-skeleton');
     const pager = setupLocalPagination({
       root: document,
       itemSelector: '.wishlist-page-item',
       pagination: document.querySelector('#wishlist-pagination'),
       perPage: 6,
-      empty,
     });
 
     const redirectToLogin = () => {
       window.location.assign(`/login?next=${encodeURIComponent('/wishlist')}`);
     };
 
-    const requireAuth = async () => {
-      try {
-        const response = await fetch(meUrl, { credentials: 'include' });
-        if (!response.ok) {
-          throw new Error('Guest');
-        }
+    const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, (char) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#039;',
+    }[char]));
 
-        return true;
+    const render = async () => {
+      if (status) status.textContent = 'Cargando favoritos...';
+      if (skeleton) skeleton.hidden = false;
+      if (empty) empty.hidden = true;
+      if (root) root.hidden = true;
+      let items = [];
+      try {
+        items = await readWishlist();
       } catch {
+        if (skeleton) skeleton.hidden = true;
         try {
           window.localStorage.removeItem('tcg.authenticated');
           window.localStorage.removeItem('tcg.user.summary');
           window.localStorage.removeItem('tcg.wishlist.items');
         } catch {}
         redirectToLogin();
-        return false;
+        return;
       }
-    };
 
-    const render = () => {
-      const items = readWishlist();
-      empty.hidden = items.length > 0;
-      root.innerHTML = items.map((item) => `
-        <article class="item wishlist-page-item">
-          ${item.image ? `<img src="${item.image}" alt="">` : `<span>${item.name.slice(0, 1).toUpperCase()}</span>`}
-          <div><h2>${item.name}</h2><p>${item.price || ''}</p></div>
-          <a class="button button-secondary" href="/producto?slug=${item.slug}">Ver</a>
-          <button class="button button-text remove" type="button" data-id="${item.id}">Quitar</button>
-        </article>
-      `).join('');
+      if (skeleton) skeleton.hidden = true;
+      if (root) root.hidden = false;
+      if (empty) empty.hidden = items.length > 0;
+      if (status) status.textContent = items.length > 0 ? `${items.length} producto${items.length === 1 ? '' : 's'} guardado${items.length === 1 ? '' : 's'}.` : '';
+      root.innerHTML = items.map((item) => {
+        const name = escapeHtml(item.name);
+        const image = escapeHtml(item.image);
+        const price = escapeHtml(item.price);
+        const slug = encodeURIComponent(item.slug || '');
+
+        return `
+          <article class="wishlist-item wishlist-page-item">
+            <div class="item-media">
+              ${item.image ? `<img src="${image}" alt="" loading="lazy">` : `<span aria-hidden="true">${name.slice(0, 1).toUpperCase()}</span>`}
+            </div>
+            <div class="item-info">
+              <strong>${name}</strong>
+              <p>${price}${item.is_in_stock ? ' · En stock' : ' · Sin stock'}</p>
+            </div>
+            <a class="button button-secondary item-view" href="/producto?slug=${slug}">Ver</a>
+            <button class="remove-item remove" type="button" data-id="${Number(item.product_id)}" aria-label="Quitar ${name} de wishlist">
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M12 21.2 4.1 13.4A5.55 5.55 0 0 1 12 5.6a5.55 5.55 0 0 1 7.9 7.8L12 21.2Z" />
+              </svg>
+            </button>
+          </article>
+        `;
+      }).join('');
 
       root.querySelectorAll('.remove').forEach((button) => {
-        button.addEventListener('click', () => {
-          writeWishlist(readWishlist().filter((item) => item.id !== Number(button.dataset.id)));
-          render();
+        button.addEventListener('click', async () => {
+          button.disabled = true;
+          await removeWishlistItem(Number(button.dataset.id));
+          await render();
         });
       });
 
       pager.refresh();
     };
 
-    requireAuth().then((isAuthenticated) => {
-      if (isAuthenticated) render();
-    });
+    let renderQueued = false;
+    const queueRender = () => {
+      if (renderQueued) return;
+      renderQueued = true;
+      window.requestAnimationFrame(() => {
+        renderQueued = false;
+        render();
+      });
+    };
+
+    window.addEventListener('tcg:wishlist-updated', queueRender);
+    render();
   </script>
 </BaseLayout>
 
@@ -101,8 +157,9 @@ import { tcgApi } from '../lib/tcg-api';
 
   .list-shell {
     display: grid;
-    grid-template-columns: minmax(0, 0.85fr) minmax(360px, 1.15fr);
+    grid-template-columns: minmax(0, 0.9fr) minmax(360px, 1.1fr);
     gap: 40px;
+    align-items: start;
   }
 
   .eyebrow {
@@ -121,16 +178,46 @@ import { tcgApi } from '../lib/tcg-api';
 
   .lede,
   .empty p,
-  .item p {
+  .status-message {
     color: var(--color-body);
-    line-height: 1.6;
+    line-height: 1.7;
   }
 
-  .list-panel {
+  .wishlist-panel {
+    display: grid;
+    gap: 14px;
     border: 1px solid var(--color-hairline);
     border-radius: var(--radius-item);
     background: var(--color-canvas);
     padding: 22px;
+  }
+
+  .panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    border-bottom: 1px solid var(--color-hairline);
+    padding-bottom: 14px;
+  }
+
+  .panel-head h2 {
+    margin: 0;
+    font-size: 1.1rem;
+  }
+
+  .panel-eyebrow {
+    margin: 0 0 4px;
+    color: var(--color-muted);
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  .status-message {
+    min-height: 22px;
+    margin: 0;
+    font-size: 0.9rem;
   }
 
   .items {
@@ -138,17 +225,79 @@ import { tcgApi } from '../lib/tcg-api';
     gap: 12px;
   }
 
-  .item {
+  .wishlist-skeleton {
     display: grid;
-    grid-template-columns: 64px 1fr auto auto;
     gap: 12px;
+  }
+
+  .wishlist-skeleton[hidden] {
+    display: none;
+  }
+
+  .items[hidden] {
+    display: none;
+  }
+
+  .wishlist-skeleton-item {
+    display: grid;
+    grid-template-columns: 64px 1fr 74px 30px;
+    gap: 14px;
     align-items: center;
     border-bottom: 1px solid var(--color-hairline);
     padding-bottom: 12px;
   }
 
-  .item img,
-  .item span {
+  .wishlist-skeleton-item > span,
+  .wishlist-skeleton-item div span {
+    display: block;
+    border-radius: 999px;
+    background: var(--color-surface-strong);
+  }
+
+  .wishlist-skeleton-item > span:first-child {
+    width: 64px;
+    height: 64px;
+    border-radius: var(--radius-item);
+    background: linear-gradient(90deg, var(--color-surface-strong), #f9fafb, var(--color-surface-strong));
+    background-size: 200% 100%;
+    animation: skeleton-pulse 1.2s ease-in-out infinite;
+  }
+
+  .wishlist-skeleton-item div {
+    display: grid;
+    gap: 10px;
+  }
+
+  .wishlist-skeleton-item div span:first-child {
+    width: 70%;
+    height: 14px;
+  }
+
+  .wishlist-skeleton-item div span:last-child {
+    width: 44%;
+    height: 12px;
+  }
+
+  .wishlist-skeleton-item > span:nth-child(3) {
+    width: 74px;
+    height: 34px;
+  }
+
+  .wishlist-skeleton-item > span:nth-child(4) {
+    width: 30px;
+    height: 30px;
+  }
+
+  :global(.wishlist-item) {
+    display: grid;
+    grid-template-columns: 64px 1fr auto auto;
+    gap: 14px;
+    align-items: center;
+    border-bottom: 1px solid var(--color-hairline);
+    padding-bottom: 12px;
+  }
+
+  :global(.item-media) {
     display: grid;
     width: 64px;
     height: 64px;
@@ -157,16 +306,51 @@ import { tcgApi } from '../lib/tcg-api';
     background: var(--color-surface-strong);
     color: var(--color-primary);
     font-weight: 800;
+    font-size: 1.3rem;
+    overflow: hidden;
+  }
+
+  :global(.item-media img) {
+    width: 100%;
+    height: 100%;
     object-fit: cover;
   }
 
-  .item h2 {
+  :global(.item-info strong) {
+    display: block;
     margin: 0;
-    font-size: 1rem;
+    font-size: 0.95rem;
+    font-weight: 600;
   }
 
-  .item p {
+  :global(.item-info p) {
     margin: 4px 0 0;
+    color: var(--color-body);
+    font-size: 0.88rem;
+  }
+
+  :global(.item-view) {
+    white-space: nowrap;
+  }
+
+  :global(.remove-item) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border: none;
+    border-radius: 50%;
+    background: #fff5f6;
+    color: var(--color-danger);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+
+  :global(.remove-item:hover) {
+    background: var(--color-danger);
+    color: #fff;
   }
 
   [hidden] {
@@ -175,8 +359,22 @@ import { tcgApi } from '../lib/tcg-api';
 
   @media (max-width: 860px) {
     .list-shell,
-    .item {
+    :global(.wishlist-item) {
       grid-template-columns: 1fr;
     }
+
+    .panel-head {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .wishlist-skeleton-item {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @keyframes skeleton-pulse {
+    0% { background-position: 100% 0; }
+    100% { background-position: -100% 0; }
   }
 </style>

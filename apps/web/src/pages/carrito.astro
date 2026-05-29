@@ -21,6 +21,10 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           </div>
 
           <section class="cart-panel" aria-live="polite">
+            <div id="cart-skeleton" class="cart-skeleton" aria-hidden="true">
+              <article><span></span><div><span></span><span></span></div><span></span></article>
+              <article><span></span><div><span></span><span></span></div><span></span></article>
+            </div>
             <div id="cart-items" class="cart-items"></div>
             <div id="cart-empty" class="empty-cart" hidden>
               <h2>Tu carrito esta vacio</h2>
@@ -42,8 +46,12 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     )
   }
 
-  <script is:inline>
+  <script>
+    import { addWishlistItem, readWishlist } from '../lib/wishlist';
+
     const _cartKey = 'tcg.cart.items';
+    const _loginUrl = `/login?next=${encodeURIComponent('/carrito')}`;
+    let wishlistIds = null;
 
     const _readCart = () => {
       try {
@@ -61,29 +69,104 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const emptyRoot = document.querySelector('#cart-empty');
     const actionsRoot = document.querySelector('#cart-actions');
     const clearButton = document.querySelector('#clear-cart');
+    const skeletonRoot = document.querySelector('#cart-skeleton');
+
+    const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, (char) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#039;',
+    }[char]));
+
+    const setWishlistButtonState = (button, isSaved) => {
+      button.setAttribute('aria-pressed', isSaved ? 'true' : 'false');
+      button.setAttribute('aria-label', isSaved ? 'Guardado en wishlist' : 'Guardar en wishlist');
+      button.classList.toggle('is-active', isSaved);
+      button.classList.remove('is-error');
+    };
+
+    const hydrateWishlistState = async () => {
+      try {
+        const items = await readWishlist();
+        wishlistIds = new Set(items.map((item) => Number(item.product_id)));
+      } catch {
+        wishlistIds = null;
+      }
+    };
+
+    const saveForLater = async (button) => {
+      if (!(wishlistIds instanceof Set)) {
+        try {
+          if (localStorage.getItem('tcg.authenticated') !== '1') {
+            window.location.assign(_loginUrl);
+            return;
+          }
+        } catch {
+          window.location.assign(_loginUrl);
+          return;
+        }
+      }
+
+      const productId = Number(button.dataset.id);
+      button.disabled = true;
+
+      try {
+        await addWishlistItem(productId);
+        if (!(wishlistIds instanceof Set)) wishlistIds = new Set();
+        wishlistIds.add(productId);
+        setWishlistButtonState(button, true);
+      } catch {
+        button.classList.add('is-error');
+        button.setAttribute('aria-label', 'No se pudo guardar en wishlist');
+        window.setTimeout(() => button.classList.remove('is-error'), 1400);
+      } finally {
+        button.disabled = false;
+      }
+    };
 
     const renderCart = () => {
       const items = _readCart();
       const hasItems = items.length > 0;
 
+      if (skeletonRoot) skeletonRoot.hidden = true;
       if (emptyRoot) emptyRoot.style.display = hasItems ? 'none' : '';
       if (actionsRoot) actionsRoot.hidden = !hasItems;
       if (!itemsRoot) return;
 
-      itemsRoot.innerHTML = items.map((item) => `
-        <article class="cart-item">
-          <div class="item-media">
-            ${item.image ? `<img src="${item.image}" alt="" loading="lazy">` : `<span aria-hidden="true">${(item.name || '?').slice(0, 1).toUpperCase()}</span>`}
-          </div>
-          <div class="item-info">
-            <strong>${item.name}</strong>
-            <p>${item.price} &middot; &times;${item.quantity}</p>
-          </div>
-          <button class="remove-item" type="button" data-id="${item.id}" aria-label="Quitar ${item.name}">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
-        </article>
-      `).join('');
+      itemsRoot.innerHTML = items.map((item) => {
+        const id = Number(item.id);
+        const name = escapeHtml(item.name || 'Producto');
+        const price = escapeHtml(item.price || '-');
+        const image = escapeHtml(item.image);
+        const quantity = Number(item.quantity || 1);
+        const saved = wishlistIds instanceof Set && wishlistIds.has(id);
+
+        return `
+          <article class="cart-item">
+            <div class="item-media">
+              ${item.image ? `<img src="${image}" alt="" loading="lazy">` : `<span aria-hidden="true">${name.slice(0, 1).toUpperCase()}</span>`}
+            </div>
+            <div class="item-info">
+              <strong>${name}</strong>
+              <p>${price} &middot; &times;${quantity}</p>
+            </div>
+            <div class="item-actions">
+              <button class="wishlist-item ${saved ? 'is-active' : ''}" type="button" data-id="${id}" aria-pressed="${saved ? 'true' : 'false'}" aria-label="Guardar ${name} en wishlist">
+                <svg class="heart-empty" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19.5 12.6 12 20l-7.5-7.4A5 5 0 0 1 12 6a5 5 0 0 1 7.5 6.6Z"/></svg>
+                <svg class="heart-filled" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21.2 4.1 13.4A5.55 5.55 0 0 1 12 5.6a5.55 5.55 0 0 1 7.9 7.8L12 21.2Z"/></svg>
+              </button>
+              <button class="remove-item" type="button" data-id="${id}" aria-label="Quitar ${name}">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+          </article>
+        `;
+      }).join('');
+
+      itemsRoot.querySelectorAll('.wishlist-item').forEach((btn) => {
+        btn.addEventListener('click', () => saveForLater(btn));
+      });
 
       itemsRoot.querySelectorAll('.remove-item').forEach((btn) => {
         btn.addEventListener('click', () => {
@@ -102,7 +185,17 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     }
 
     window.addEventListener('tcg:cart-updated', renderCart);
-    renderCart();
+    window.addEventListener('tcg:wishlist-updated', (event) => {
+      const detail = event.detail || {};
+      const productId = Number(detail.productId);
+      if (!productId || !detail.action) return;
+
+      if (!(wishlistIds instanceof Set)) wishlistIds = new Set();
+      if (detail.action === 'added') wishlistIds.add(productId);
+      if (detail.action === 'removed') wishlistIds.delete(productId);
+      renderCart();
+    });
+    hydrateWishlistState().finally(renderCart);
   </script>
 </BaseLayout>
 
@@ -154,6 +247,64 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     gap: 12px;
   }
 
+  .cart-skeleton {
+    display: grid;
+    gap: 12px;
+  }
+
+  .cart-skeleton[hidden] {
+    display: none;
+  }
+
+  .cart-skeleton article {
+    display: grid;
+    grid-template-columns: 64px 1fr 68px;
+    gap: 14px;
+    align-items: center;
+    border-bottom: 1px solid var(--color-hairline);
+    padding-bottom: 12px;
+  }
+
+  .cart-skeleton span {
+    display: block;
+    border-radius: 999px;
+    background: var(--color-surface-strong);
+  }
+
+  .cart-skeleton article > span:first-child {
+    width: 64px;
+    height: 64px;
+    border-radius: var(--radius-item);
+    background: linear-gradient(90deg, var(--color-surface-strong), #f9fafb, var(--color-surface-strong));
+    background-size: 200% 100%;
+    animation: cart-skeleton-pulse 1.2s ease-in-out infinite;
+  }
+
+  .cart-skeleton div {
+    display: grid;
+    gap: 10px;
+  }
+
+  .cart-skeleton div span:first-child {
+    width: 72%;
+    height: 14px;
+  }
+
+  .cart-skeleton div span:last-child {
+    width: 42%;
+    height: 12px;
+  }
+
+  .cart-skeleton article > span:last-child {
+    width: 68px;
+    height: 30px;
+  }
+
+  @keyframes cart-skeleton-pulse {
+    0% { background-position: 100% 0; }
+    100% { background-position: -100% 0; }
+  }
+
   .cart-actions {
     display: flex;
     flex-wrap: wrap;
@@ -201,6 +352,57 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     margin: 0;
     color: var(--color-body);
     font-size: 0.88rem;
+  }
+
+  :global(.item-actions) {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  :global(.wishlist-item) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border: 1px solid var(--color-hairline);
+    border-radius: 50%;
+    background: var(--color-canvas);
+    color: var(--color-body);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+  }
+
+  :global(.wishlist-item:hover),
+  :global(.wishlist-item[aria-pressed="true"]),
+  :global(.wishlist-item.is-active) {
+    border-color: #f2b8c0;
+    background: #fff5f6;
+    color: var(--color-danger);
+  }
+
+  :global(.wishlist-item .heart-filled),
+  :global(.wishlist-item[aria-pressed="true"] .heart-empty),
+  :global(.wishlist-item.is-active .heart-empty) {
+    display: none;
+  }
+
+  :global(.wishlist-item[aria-pressed="true"] .heart-filled),
+  :global(.wishlist-item.is-active .heart-filled) {
+    display: block;
+  }
+
+  :global(.wishlist-item:disabled) {
+    cursor: wait;
+    opacity: 0.7;
+  }
+
+  :global(.wishlist-item.is-error) {
+    border-color: var(--color-danger);
+    background: #fde8e8;
+    color: var(--color-danger);
   }
 
   :global(.remove-item) {

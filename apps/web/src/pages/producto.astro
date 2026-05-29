@@ -12,6 +12,19 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     siteConfig.features.shop ? (
       <main class="product-view">
         <section class="page-shell">
+          <article class="product-skeleton" id="product-skeleton" aria-hidden="true">
+            <div class="skeleton-media"></div>
+            <div class="skeleton-summary">
+              <span class="skeleton-eyebrow"></span>
+              <span class="skeleton-title"></span>
+              <span class="skeleton-price"></span>
+              <span></span>
+              <span></span>
+              <span class="skeleton-short"></span>
+              <span class="skeleton-button"></span>
+            </div>
+          </article>
+
           <article class="product-detail" id="product-detail" hidden>
             <div class="media" id="product-media"></div>
             <div class="summary">
@@ -23,7 +36,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             </div>
           </article>
 
-          <div class="notice" id="product-status">Cargando producto...</div>
+          <div class="notice" id="product-status" hidden></div>
         </section>
       </main>
     ) : (
@@ -38,6 +51,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     import { addCartItem } from '../lib/cart';
     import { formatStorePrice, shopApi } from '../lib/shop';
 
+    const skeleton = document.querySelector('#product-skeleton');
     const detail = document.querySelector('#product-detail');
     const status = document.querySelector('#product-status');
     const media = document.querySelector('#product-media');
@@ -50,7 +64,24 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     let currentProduct = null;
     let currentPrice = '-';
 
+    const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, (char) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#039;',
+    }[char]));
+
+    const stripHtml = (value) => {
+      const template = document.createElement('template');
+      template.innerHTML = String(value || '');
+      return template.content.textContent || '';
+    };
+
     const setStatus = (message, state = '') => {
+      if (skeleton instanceof HTMLElement) {
+        skeleton.hidden = true;
+      }
       if (status instanceof HTMLElement) {
         status.textContent = message;
         status.dataset.state = state;
@@ -86,9 +117,10 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         currentPrice = formatStorePrice(currentProduct.prices);
 
         if (media instanceof HTMLElement) {
+          const safeName = escapeHtml(currentProduct.name);
           media.innerHTML = image
-            ? `<img src="${image.src}" alt="${image.alt || currentProduct.name}">`
-            : `<span>${currentProduct.name.slice(0, 1).toUpperCase()}</span>`;
+            ? `<img src="${escapeHtml(image.src)}" alt="${escapeHtml(image.alt || currentProduct.name)}">`
+            : `<span>${safeName.slice(0, 1).toUpperCase()}</span>`;
         }
         if (name) {
           name.textContent = currentProduct.name;
@@ -97,10 +129,13 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           price.textContent = currentPrice;
         }
         if (description instanceof HTMLElement) {
-          description.innerHTML = currentProduct.description || currentProduct.short_description || '';
+          description.textContent = stripHtml(currentProduct.description || currentProduct.short_description || '');
         }
         if (status instanceof HTMLElement) {
           status.hidden = true;
+        }
+        if (skeleton instanceof HTMLElement) {
+          skeleton.hidden = true;
         }
         if (detail instanceof HTMLElement) {
           detail.hidden = false;
@@ -143,6 +178,87 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     grid-template-columns: minmax(300px, 0.9fr) minmax(0, 1.1fr);
     gap: 36px;
     align-items: start;
+  }
+
+  .product-skeleton {
+    display: grid;
+    grid-template-columns: minmax(300px, 0.9fr) minmax(0, 1.1fr);
+    gap: 36px;
+    align-items: start;
+  }
+
+  .product-skeleton[hidden] {
+    display: none;
+  }
+
+  .skeleton-media,
+  .skeleton-summary {
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-item);
+    background: var(--color-canvas);
+  }
+
+  .skeleton-media {
+    aspect-ratio: 1;
+    background: linear-gradient(90deg, var(--color-surface-strong), #f9fafb, var(--color-surface-strong));
+    background-size: 200% 100%;
+    animation: product-skeleton-pulse 1.2s ease-in-out infinite;
+  }
+
+  .skeleton-summary {
+    display: grid;
+    gap: 14px;
+    padding: 28px;
+  }
+
+  .skeleton-summary span {
+    display: block;
+    height: 14px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--color-surface-strong), #f9fafb, var(--color-surface-strong));
+    background-size: 200% 100%;
+    animation: product-skeleton-pulse 1.2s ease-in-out infinite;
+  }
+
+  .skeleton-eyebrow {
+    width: 92px;
+    height: 11px !important;
+  }
+
+  .skeleton-title {
+    width: min(460px, 100%);
+    height: clamp(36px, 6vw, 62px) !important;
+    margin-bottom: 4px;
+  }
+
+  .skeleton-price {
+    width: 130px;
+    height: 22px !important;
+    margin: 4px 0 10px;
+  }
+
+  .skeleton-summary span:nth-child(4) {
+    width: 92%;
+  }
+
+  .skeleton-summary span:nth-child(5) {
+    width: 84%;
+  }
+
+  .skeleton-short {
+    width: 54%;
+  }
+
+  .skeleton-button {
+    width: 180px;
+    height: 44px !important;
+    margin-top: 12px;
+    border-radius: var(--radius-pill) !important;
+  }
+
+  @keyframes product-skeleton-pulse {
+    0% { background-position: 100% 0; }
+    100% { background-position: -100% 0; }
   }
 
   .media {
@@ -209,7 +325,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   }
 
   @media (max-width: 860px) {
-    .product-detail {
+    .product-detail,
+    .product-skeleton {
       grid-template-columns: 1fr;
     }
   }

@@ -16,7 +16,12 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         <p class="lede">Vista base preparada para conectar pedidos reales de WooCommerce cuando el checkout este activo.</p>
       </div>
       <section class="orders-panel">
-        <div class="empty" id="orders-empty">
+        <div class="orders-skeleton" id="orders-skeleton" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+        <div class="empty" id="orders-empty" hidden>
           <h2>No hay pedidos todavia</h2>
           <p>Cuando se conecte el checkout, aqui se listaran pedidos, estados, importes y enlaces de detalle.</p>
           <a class="button button-primary" href="/tienda">Ir a tienda</a>
@@ -28,12 +33,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
   <script is:inline>
     const orderKey = 'tcg.last-order';
+    const skeleton = document.querySelector('#orders-skeleton');
     const empty = document.querySelector('#orders-empty');
     const list = document.querySelector('#orders-list');
 
     try {
       const order = JSON.parse(localStorage.getItem(orderKey) || 'null');
       if (order && list && empty) {
+        skeleton.hidden = true;
         empty.hidden = true;
         list.innerHTML = `
           <article class="order-card">
@@ -45,8 +52,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             <span>Demo</span>
           </article>
         `;
+      } else {
+        skeleton.hidden = true;
+        if (empty) empty.hidden = false;
       }
-    } catch {}
+    } catch {
+      skeleton.hidden = true;
+      if (empty) empty.hidden = false;
+    }
   </script>
 </BaseLayout>
 
@@ -93,6 +106,30 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   .orders-list {
     display: grid;
     gap: 12px;
+  }
+
+  .orders-skeleton {
+    display: grid;
+    gap: 12px;
+  }
+
+  .orders-skeleton span {
+    display: block;
+    height: 68px;
+    border-radius: var(--radius-item);
+    background: linear-gradient(90deg, #eef1f2 25%, #f7f8f8 37%, #eef1f2 63%);
+    background-size: 400% 100%;
+    animation: orders-loading 1.2s ease-in-out infinite;
+  }
+
+  @keyframes orders-loading {
+    0% {
+      background-position: 100% 50%;
+    }
+
+    100% {
+      background-position: 0 50%;
+    }
   }
 
   :global(.order-card) {

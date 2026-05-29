@@ -478,6 +478,9 @@ POST /wp-json/tcg/v1/password/forgot
 POST /wp-json/tcg/v1/password/reset
 POST /wp-json/tcg/v1/email/verify
 POST /wp-json/tcg/v1/email/resend
+GET  /wp-json/tcg/v1/wishlist
+POST /wp-json/tcg/v1/wishlist
+DELETE /wp-json/tcg/v1/wishlist/{product_id}
 ```
 
 El 2FA usa TOTP compatible con aplicaciones autenticadoras. Al activarlo, la web muestra QR, secreto manual y codigos de recuperacion de un solo uso. Los codigos solo se muestran al activar y se guardan hasheados.
@@ -489,6 +492,8 @@ Para Flutter se usa `Authorization: Bearer ...`. Para Astro, el backend establec
 Por defecto se mantiene una sesion activa por `device_name`. Cada nuevo login o registro revoca tokens anteriores del mismo dispositivo, pero no cierra otros dispositivos. Por ejemplo, un login web no invalida la app mobile, pero un nuevo login web invalida la sesion web anterior.
 
 Esta API debe ser tambien la base para Astro cuando necesite trabajar con usuario autenticado. La web puede consumir contenido publico con endpoints nativos de WordPress (`/wp-json/wp/v2/...`) y usar `/wp-json/tcg/v1/...` para login, cuenta, wishlist, compras, ventas o cualquier dato privado compartido con la app.
+
+La API propia vive como mu-plugin de aplicacion y se puede ampliar por modulos de dominio dentro de `apps/backend/web/app/mu-plugins/tcg-api/modules`. Wishlist ya usa este patron con `TCG_Platform_API_Wishlist`: guarda relaciones `user_id` + `product_id` en la tabla `wp_tcg_wishlist_items`, mientras que nombre, precio, imagen, enlace y stock se leen desde WooCommerce al responder.
 
 Buenas practicas aplicadas en la capa inicial:
 
@@ -542,7 +547,9 @@ Rutas Astro iniciales para tienda:
 /usuarios
 ```
 
-Estas rutas son una base visual y funcional ligera. La tienda lee productos desde WooCommerce Store API, el producto usa `slug` por query string para no depender de rutas generadas en build, y el carrito guarda una seleccion local. Wishlist usa `localStorage` por ahora, pedidos queda como placeholder para conectarlo al checkout real, y checkout/compra realizada simulan el flujo sin pasarela externa.
+Estas rutas son una base visual y funcional ligera. La tienda lee productos desde WooCommerce Store API, el producto usa `slug` por query string para no depender de rutas generadas en build, y el carrito guarda una seleccion local temporal para invitados. Wishlist requiere sesion y se persiste en WordPress mediante `/wp-json/tcg/v1/wishlist`. Pedidos queda como placeholder para conectarlo al checkout real, y checkout/compra realizada simulan el flujo sin pasarela externa.
+
+Regla de stock para el futuro carrito persistente: el carrito representa intencion, no reserva inventario. WooCommerce debe validar disponibilidad y precio al crear pedido/checkout; si se usa reserva temporal, debe ocurrir en pedido pendiente/draft o durante checkout, no al anadir al carrito.
 
 `/inventario`, `/ventas`, `/admin` y `/usuarios` son vistas de backoffice frontend. Estan pensadas como lectura, resumen o lanzadera hacia WordPress, no como sustituto completo de `wp-admin`. La regla de la plantilla es: WordPress gestiona contenido, productos, stock, pedidos, usuarios y configuracion; Astro muestra datos utiles, flujos de usuario y acciones controladas que tengan sentido fuera del panel. El listado de usuarios es solo para administradores y enlaza cada fila al editor real de WordPress.
 
