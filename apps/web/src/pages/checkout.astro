@@ -3,6 +3,7 @@ import ModuleDisabled from '../components/ModuleDisabled.astro';
 import SiteHeader from '../components/SiteHeader.astro';
 import { siteConfig } from '../config/site';
 import BaseLayout from '../layouts/BaseLayout.astro';
+import { tcgApi } from '../lib/tcg-api';
 ---
 
 <BaseLayout title={`Checkout | ${siteConfig.name}`}>
@@ -16,7 +17,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             <p class="eyebrow">Checkout starter</p>
             <h1>Finalizar compra</h1>
             <p class="lede">
-              Flujo base sin pasarela real. Sirve para validar UI, carrito y navegacion antes de conectar WooCommerce checkout o un proveedor de pago.
+              Flujo base sin pasarela real. Requiere cuenta para mantener el historial preparado antes de conectar WooCommerce checkout o un proveedor de pago.
             </p>
           </div>
 
@@ -70,7 +71,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     )
   }
 
-  <script is:inline>
+  <script is:inline define:vars={{ meUrl: tcgApi.me }}>
     const cartKey = 'tcg.cart.items';
     const orderKey = 'tcg.last-order';
     const itemsRoot = document.querySelector('#checkout-items');
@@ -81,6 +82,28 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
     const readCart = () => {
       try { return JSON.parse(localStorage.getItem(cartKey) || '[]'); } catch { return []; }
+    };
+
+    const redirectToLogin = () => {
+      window.location.assign(`/login?next=${encodeURIComponent('/checkout')}`);
+    };
+
+    const requireAuth = async () => {
+      try {
+        const response = await fetch(meUrl, { credentials: 'include' });
+        if (!response.ok) {
+          throw new Error('Guest');
+        }
+
+        return true;
+      } catch {
+        try {
+          localStorage.removeItem('tcg.authenticated');
+          localStorage.removeItem('tcg.user.summary');
+        } catch {}
+        redirectToLogin();
+        return false;
+      }
     };
 
     const render = () => {
@@ -98,8 +121,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       `).join('');
     };
 
-    form?.addEventListener('submit', (event) => {
+    form?.addEventListener('submit', async (event) => {
       event.preventDefault();
+      const isAuthenticated = await requireAuth();
+      if (!isAuthenticated) return;
+
       const items = readCart();
       if (!items.length) {
         if (status) status.textContent = 'Anade productos antes de continuar.';
@@ -120,7 +146,9 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       window.location.assign('/compra-realizada');
     });
 
-    render();
+    requireAuth().then((isAuthenticated) => {
+      if (isAuthenticated) render();
+    });
   </script>
 </BaseLayout>
 

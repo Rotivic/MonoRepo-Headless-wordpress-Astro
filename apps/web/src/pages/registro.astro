@@ -60,6 +60,10 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   <script define:vars={{ registerUrl: tcgApi.register }}>
     const form = document.querySelector('#register-form');
     const status = document.querySelector('#register-status');
+    const redirectTarget = (() => {
+      const next = new URLSearchParams(window.location.search).get('next');
+      return next?.startsWith('/') && !next.startsWith('//') ? next : '/perfil';
+    })();
 
     form?.addEventListener('submit', async (event) => {
       event.preventDefault();
@@ -104,10 +108,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             avatar_url: data.data?.avatar_url || '',
             initials: ([data.data?.first_name, data.data?.last_name].filter(Boolean).join(' ') || data.data?.email || 'U').slice(0, 1).toUpperCase(),
           }));
+          const cartItems = JSON.parse(window.localStorage.getItem('tcg.cart.items') || '[]');
+          if (Array.isArray(cartItems) && cartItems.length > 0) {
+            window.localStorage.setItem('tcg.cart.pending-merge', '1');
+          }
         } catch {
           // The HttpOnly cookie is the source of truth.
         }
-        window.location.assign('/perfil');
+        window.location.assign(redirectTarget);
       } catch (error) {
         status.dataset.state = 'error';
         status.textContent = error instanceof Error ? error.message : 'No se pudo crear la cuenta.';

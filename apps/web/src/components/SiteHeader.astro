@@ -112,6 +112,14 @@ const { active = 'home' } = Astro.props;
   const logoutButton = document.querySelector('#header-logout');
   const authKey = 'tcg.authenticated';
   const userSummaryKey = 'tcg.user.summary';
+  const sessionStorageKeys = [
+    authKey,
+    userSummaryKey,
+    'tcg.cart.items',
+    'tcg.cart.pending-merge',
+    'tcg.wishlist.items',
+    'tcg.last-order',
+  ];
 
   const getInitials = (user) => {
     return ([user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.email || 'U').slice(0, 1).toUpperCase();
@@ -136,6 +144,15 @@ const { active = 'home' } = Astro.props;
     const csrf = document.cookie.split('; ').find((row) => row.startsWith('tcg_platform_csrf='))?.split('=')[1];
     if (!csrf) return {};
     return { 'X-TCG-CSRF': decodeURIComponent(csrf).split(':')[0] };
+  };
+
+  const clearLocalSessionData = () => {
+    try {
+      sessionStorageKeys.forEach((key) => localStorage.removeItem(key));
+    } catch {}
+
+    window.dispatchEvent(new CustomEvent('tcg:cart-updated'));
+    window.dispatchEvent(new CustomEvent('tcg:wishlist-updated'));
   };
 
   const setLoggedIn = (isLoggedIn, user) => {
@@ -205,6 +222,7 @@ const { active = 'home' } = Astro.props;
 
   logoutButton?.addEventListener('click', async () => {
     try { await fetch(logoutUrl, { method: 'POST', credentials: 'include', headers: csrfHeaders() }); } catch {}
+    clearLocalSessionData();
     setLoggedIn(false, null);
     window.location.assign('/login');
   });

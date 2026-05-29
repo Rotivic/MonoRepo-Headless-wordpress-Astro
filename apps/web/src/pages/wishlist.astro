@@ -3,6 +3,7 @@ import SiteHeader from '../components/SiteHeader.astro';
 import Pagination from '../components/Pagination.astro';
 import { siteConfig } from '../config/site';
 import BaseLayout from '../layouts/BaseLayout.astro';
+import { tcgApi } from '../lib/tcg-api';
 ---
 
 <BaseLayout title={`Wishlist | ${siteConfig.name}`}>
@@ -12,7 +13,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       <div>
         <p class="eyebrow">Cuenta</p>
         <h1>Wishlist</h1>
-        <p class="lede">Base visual local para favoritos. El siguiente paso seria persistirla en WordPress para compartir web y mobile.</p>
+        <p class="lede">Tus favoritos quedan ligados a tu cuenta. La persistencia en WordPress queda preparada para el siguiente sprint.</p>
       </div>
       <section class="list-panel">
         <div id="wishlist-items" class="items"></div>
@@ -26,7 +27,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     </section>
   </main>
 
-  <script>
+  <script define:vars={{ meUrl: tcgApi.me }}>
     import { setupLocalPagination } from '../lib/pagination';
     import { readWishlist, writeWishlist } from '../lib/wishlist';
 
@@ -39,6 +40,29 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       perPage: 6,
       empty,
     });
+
+    const redirectToLogin = () => {
+      window.location.assign(`/login?next=${encodeURIComponent('/wishlist')}`);
+    };
+
+    const requireAuth = async () => {
+      try {
+        const response = await fetch(meUrl, { credentials: 'include' });
+        if (!response.ok) {
+          throw new Error('Guest');
+        }
+
+        return true;
+      } catch {
+        try {
+          window.localStorage.removeItem('tcg.authenticated');
+          window.localStorage.removeItem('tcg.user.summary');
+          window.localStorage.removeItem('tcg.wishlist.items');
+        } catch {}
+        redirectToLogin();
+        return false;
+      }
+    };
 
     const render = () => {
       const items = readWishlist();
@@ -62,7 +86,9 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       pager.refresh();
     };
 
-    render();
+    requireAuth().then((isAuthenticated) => {
+      if (isAuthenticated) render();
+    });
   </script>
 </BaseLayout>
 

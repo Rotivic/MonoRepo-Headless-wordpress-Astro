@@ -170,6 +170,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const twoFactorSetupUrl = tcgApi.twoFactorSetup;
     const twoFactorEnableUrl = tcgApi.twoFactorEnable;
     const twoFactorDisableUrl = tcgApi.twoFactorDisable;
+    const localSessionKeys = [
+      'tcg.authenticated',
+      'tcg.user.summary',
+      'tcg.cart.items',
+      'tcg.cart.pending-merge',
+      'tcg.wishlist.items',
+      'tcg.last-order',
+    ];
 
     const loadingState = document.querySelector('#loading-state');
     const emptyState = document.querySelector('#empty-state');
@@ -212,6 +220,15 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       if (!el) return;
       el.dataset.state = state;
       el.textContent = message;
+    };
+
+    const clearLocalSessionData = () => {
+      try {
+        localSessionKeys.forEach((key) => window.localStorage.removeItem(key));
+      } catch {}
+
+      window.dispatchEvent(new CustomEvent('tcg:cart-updated'));
+      window.dispatchEvent(new CustomEvent('tcg:wishlist-updated'));
     };
 
     const setTwoFactorUi = (enabled) => {
@@ -332,8 +349,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       try {
         const data = await apiJson(`${sessionsUrl}/${button.dataset.id}`, { method: 'DELETE' });
         if (data.current_revoked) {
-          window.localStorage.removeItem('tcg.authenticated');
-          window.localStorage.removeItem('tcg.user.summary');
+          clearLocalSessionData();
           window.location.assign('/login');
           return;
         }
@@ -406,8 +422,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       try {
         await fetch(logoutUrl, { method: 'POST', credentials: 'include', headers: csrfHeaders() });
       } finally {
-        window.localStorage.removeItem('tcg.authenticated');
-        window.localStorage.removeItem('tcg.user.summary');
+        clearLocalSessionData();
         window.location.assign('/login');
       }
     });

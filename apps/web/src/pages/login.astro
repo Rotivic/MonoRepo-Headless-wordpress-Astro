@@ -31,7 +31,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       <p class="status-message" id="login-status" aria-live="polite"></p>
 
       <button class="button button-primary" type="submit">Entrar</button>
-      <a class="button button-secondary" href="/registro">Crear cuenta</a>
+      <a class="button button-secondary" href="/registro" id="register-link">Crear cuenta</a>
     </form>
 
     <form class="auth-form hidden" id="two-factor-form">
@@ -55,7 +55,17 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const status = document.querySelector('#login-status');
     const twoFactorForm = document.querySelector('#two-factor-form');
     const twoFactorStatus = document.querySelector('#two-factor-status');
+    const registerLink = document.querySelector('#register-link');
     let challengeToken = '';
+
+    const redirectTarget = (() => {
+      const next = new URLSearchParams(window.location.search).get('next');
+      return next?.startsWith('/') && !next.startsWith('//') ? next : '/perfil';
+    })();
+
+    if (registerLink instanceof HTMLAnchorElement && redirectTarget !== '/perfil') {
+      registerLink.href = `/registro?next=${encodeURIComponent(redirectTarget)}`;
+    }
 
     const persistUserSummary = (user) => {
       window.localStorage.setItem('tcg.authenticated', '1');
@@ -63,6 +73,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         avatar_url: user?.avatar_url || '',
         initials: ([user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.email || 'U').slice(0, 1).toUpperCase(),
       }));
+
+      const cartItems = JSON.parse(window.localStorage.getItem('tcg.cart.items') || '[]');
+      if (Array.isArray(cartItems) && cartItems.length > 0) {
+        window.localStorage.setItem('tcg.cart.pending-merge', '1');
+      }
     };
 
     form?.addEventListener('submit', async (event) => {
@@ -107,7 +122,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         } catch {
           // The HttpOnly cookie is the source of truth.
         }
-        window.location.assign('/perfil');
+        window.location.assign(redirectTarget);
       } catch (error) {
         status.dataset.state = 'error';
         status.textContent = error instanceof Error ? error.message : 'No se pudo iniciar sesion.';
@@ -144,7 +159,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         } catch {
           // The HttpOnly cookie is the source of truth.
         }
-        window.location.assign('/perfil');
+        window.location.assign(redirectTarget);
       } catch (error) {
         twoFactorStatus.dataset.state = 'error';
         twoFactorStatus.textContent = error instanceof Error ? error.message : 'No se pudo verificar el codigo.';

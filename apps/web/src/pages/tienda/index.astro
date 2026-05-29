@@ -74,9 +74,11 @@ if (siteConfig.features.shop) {
 
   <script>
     import { setupLocalPagination } from '../../lib/pagination';
+    import { tcgApi } from '../../lib/tcg-api';
 
     const _cartKey = 'tcg.cart.items';
     const _wishlistKey = 'tcg.wishlist.items';
+    const _loginUrl = `/login?next=${encodeURIComponent('/tienda')}`;
 
     const _addCartItem = (item) => {
       try {
@@ -108,8 +110,28 @@ if (siteConfig.features.shop) {
       });
     });
 
+    const _requireWishlistAuth = async () => {
+      try {
+        const response = await fetch(tcgApi.me, { credentials: 'include' });
+        if (!response.ok) throw new Error('Guest');
+        return true;
+      } catch {
+        try {
+          localStorage.removeItem('tcg.authenticated');
+          localStorage.removeItem('tcg.user.summary');
+          localStorage.removeItem(_wishlistKey);
+        } catch {}
+        window.location.assign(_loginUrl);
+        return false;
+      }
+    };
+
     document.querySelectorAll('.add-to-wishlist').forEach((button) => {
-      button.addEventListener('click', () => {
+      button.addEventListener('click', async () => {
+        button.disabled = true;
+        const isAuthenticated = await _requireWishlistAuth();
+        if (!isAuthenticated) return;
+
         try {
           const raw = localStorage.getItem(_wishlistKey);
           const items = raw ? JSON.parse(raw) : [];
@@ -127,7 +149,10 @@ if (siteConfig.features.shop) {
         } catch {}
 
         button.textContent = 'Guardado';
-        window.setTimeout(() => { button.textContent = 'Wishlist'; }, 1200);
+        window.setTimeout(() => {
+          button.textContent = 'Wishlist';
+          button.disabled = false;
+        }, 1200);
       });
     });
 
