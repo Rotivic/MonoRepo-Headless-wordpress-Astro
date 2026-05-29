@@ -2,6 +2,7 @@
 import BackButton from '../components/BackButton.astro';
 import ModuleDisabled from '../components/ModuleDisabled.astro';
 import SiteHeader from '../components/SiteHeader.astro';
+import Pagination from '../components/Pagination.astro';
 import { siteConfig } from '../config/site';
 import { tcgApi } from '../lib/tcg-api';
 import BaseLayout from '../layouts/BaseLayout.astro';
@@ -32,40 +33,54 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             <BackButton fallback="/admin" />
             <p class="eyebrow">Ventas</p>
             <h1>Panel de ventas</h1>
-            <p class="lede">Vista starter para lectura de ventas. En una implementacion real debe alimentarse de pedidos WooCommerce con permisos de administrador o vendedor.</p>
+            <p class="lede">Resumen de pedidos WooCommerce para administradores y gestores de tienda.</p>
           </div>
 
           <section class="sales-panel">
             <div class="metric">
               <span>Pedidos</span>
-              <strong>24</strong>
+              <strong id="metric-orders">-</strong>
             </div>
             <div class="metric">
               <span>Ingresos</span>
-              <strong>1.840 EUR</strong>
+              <strong id="metric-revenue">-</strong>
             </div>
             <div class="metric">
               <span>Pendientes</span>
-              <strong>6</strong>
+              <strong id="metric-pending">-</strong>
             </div>
             <div class="chart-card">
               <div class="chart-head">
-                <h2>Ventas demo</h2>
-                <span>Ultimos 7 dias</span>
+                <h2>Ventas reales</h2>
+                <span>Ultimos 30 dias</span>
               </div>
-              <div class="chart" aria-label="Grafica demo de ventas semanales">
-                <span style="--value: 42" data-label="L"></span>
-                <span style="--value: 64" data-label="M"></span>
-                <span style="--value: 38" data-label="X"></span>
-                <span style="--value: 78" data-label="J"></span>
-                <span style="--value: 56" data-label="V"></span>
-                <span style="--value: 92" data-label="S"></span>
-                <span style="--value: 70" data-label="D"></span>
-              </div>
+              <div class="chart" id="sales-chart" aria-label="Grafica de ventas semanales"></div>
             </div>
-            <p class="notice">Conecta esta vista a WooCommerce REST API cuando exista checkout real y roles definidos.</p>
+            <div class="orders-table-card">
+              <div class="chart-head">
+                <h2>Pedidos</h2>
+                <span id="orders-count">0 resultados</span>
+              </div>
+              <form class="orders-search" id="orders-search">
+                <input id="orders-query" type="search" placeholder="Buscar por pedido, cliente, email, estado o total" autocomplete="off" />
+              </form>
+              <div class="orders-table" id="orders-table"></div>
+              <Pagination id="sales-pagination" label="Paginacion de ventas" />
+            </div>
+            <p class="notice" id="sales-status"></p>
           </section>
         </section>
+        <div class="sales-modal-backdrop" id="sales-modal-backdrop" hidden></div>
+        <dialog class="sales-modal" id="sales-modal">
+          <div class="modal-head">
+            <div>
+              <p class="eyebrow">Detalle</p>
+              <h2 id="modal-title">Pedido</h2>
+            </div>
+            <button class="button button-secondary" id="modal-close" type="button">Cerrar</button>
+          </div>
+          <div class="modal-body" id="modal-body"></div>
+        </dialog>
       </main>
     ) : (
       <ModuleDisabled
@@ -75,15 +90,182 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     )
   }
 
-  <script define:vars={{ meUrl: tcgApi.me }}>
+  <script define:vars={{ meUrl: tcgApi.me, salesUrl: tcgApi.adminSales }}>
     const page = document.querySelector('#backoffice-page');
     const loading = document.querySelector('#sales-loading');
+    const metricOrders = document.querySelector('#metric-orders');
+    const metricRevenue = document.querySelector('#metric-revenue');
+    const metricPending = document.querySelector('#metric-pending');
+    const chart = document.querySelector('#sales-chart');
+    const ordersTable = document.querySelector('#orders-table');
+    const ordersSearch = document.querySelector('#orders-search');
+    const ordersQuery = document.querySelector('#orders-query');
+    const ordersCount = document.querySelector('#orders-count');
+    const pagination = document.querySelector('#sales-pagination');
+    const salesStatus = document.querySelector('#sales-status');
+    const modal = document.querySelector('#sales-modal');
+    const modalBackdrop = document.querySelector('#sales-modal-backdrop');
+    const modalTitle = document.querySelector('#modal-title');
+    const modalBody = document.querySelector('#modal-body');
+    const modalClose = document.querySelector('#modal-close');
+    let allOrders = [];
+    let filteredOrders = [];
+    let currentPage = 1;
+    const perPage = 8;
+
+    const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, (char) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#039;',
+    }[char]));
+
+    const renderSales = (data) => {
+      if (metricOrders) metricOrders.textContent = String(data.metrics?.orders ?? 0);
+      if (metricRevenue) metricRevenue.textContent = data.metrics?.revenue || '0';
+      if (metricPending) metricPending.textContent = String(data.metrics?.pending ?? 0);
+
+      const max = Math.max(1, ...(data.chart || []).map((item) => Number(item.total || 0)));
+      if (chart) {
+        const marks = [100, 75, 50, 25, 0];
+        chart.innerHTML = `
+          <div class="chart-scale">
+            ${marks.map((mark) => `<span>${Math.round((max * mark) / 100)}</span>`).join('')}
+          </div>
+          <div class="chart-bars">
+            ${(data.chart || []).map((item, index, items) => {
+          const value = Math.max(8, Math.round((Number(item.total || 0) / max) * 100));
+              const showLabel = index === 0 || index === items.length - 1 || index % 5 === 0;
+              return `<span style="--value: ${value}" data-label="${showLabel ? escapeHtml(item.label) : ''}" title="${escapeHtml(item.label)} · ${Number(item.total || 0).toFixed(2)}"></span>`;
+            }).join('')}
+          </div>
+        `;
+      }
+
+      allOrders = data.orders || [];
+      filteredOrders = allOrders;
+      renderOrdersTable();
+    };
+
+    const orderSearchText = (order) => [
+      order.number,
+      order.id,
+      order.status_label,
+      order.status,
+      order.total,
+      order.billing?.name,
+      order.billing?.email,
+      order.payment_method_title,
+    ].join(' ').toLowerCase();
+
+    const renderOrdersTable = () => {
+      if (!ordersTable) return;
+      const totalPages = Math.max(1, Math.ceil(filteredOrders.length / perPage));
+      currentPage = Math.min(currentPage, totalPages);
+      const visible = filteredOrders.slice((currentPage - 1) * perPage, currentPage * perPage);
+
+      if (ordersCount) ordersCount.textContent = `${filteredOrders.length} resultado${filteredOrders.length === 1 ? '' : 's'}`;
+      if (pagination) pagination.hidden = filteredOrders.length <= perPage;
+      pagination?.querySelector('[data-pagination-status]') && (pagination.querySelector('[data-pagination-status]').textContent = `Pagina ${currentPage} de ${totalPages}`);
+      pagination?.querySelector('[data-pagination-prev]') && (pagination.querySelector('[data-pagination-prev]').disabled = currentPage <= 1);
+      pagination?.querySelector('[data-pagination-next]') && (pagination.querySelector('[data-pagination-next]').disabled = currentPage >= totalPages);
+
+      ordersTable.innerHTML = `
+        <div class="orders-row orders-row-head">
+          <span>Pedido</span>
+          <span>Cliente</span>
+          <span>Estado</span>
+          <span>Total</span>
+          <span></span>
+        </div>
+        ${visible.map((order) => `
+          <article class="orders-row">
+            <div>
+              <strong>#${escapeHtml(order.number || order.id)}</strong>
+              <span>${order.created_at ? new Date(order.created_at).toLocaleString('es-ES') : ''}</span>
+            </div>
+            <div>
+              <strong>${escapeHtml(order.billing?.name || 'Cliente')}</strong>
+              <span>${escapeHtml(order.billing?.email || '')}</span>
+            </div>
+            <span class="status-pill">${escapeHtml(order.status_label || order.status || '')}</span>
+            <strong>${escapeHtml(order.total || '')}</strong>
+            <button class="button button-secondary order-detail" type="button" data-id="${Number(order.id)}">Ver</button>
+          </article>
+        `).join('') || '<p class="notice">No hay pedidos para mostrar.</p>'}
+      `;
+
+      ordersTable.querySelectorAll('.order-detail').forEach((button) => {
+        button.addEventListener('click', () => openOrderModal(Number(button.dataset.id)));
+      });
+    };
+
+    const openOrderModal = (orderId) => {
+      const order = allOrders.find((item) => Number(item.id) === orderId);
+      if (!order || !modal || !modalBody || !modalTitle) return;
+      modalTitle.textContent = `Pedido #${order.number || order.id}`;
+      modalBody.innerHTML = `
+        <dl class="modal-data">
+          <div><dt>Estado</dt><dd>${escapeHtml(order.status_label || order.status || '')}</dd></div>
+          <div><dt>Total</dt><dd>${escapeHtml(order.total || '')}</dd></div>
+          <div><dt>Fecha</dt><dd>${order.created_at ? new Date(order.created_at).toLocaleString('es-ES') : ''}</dd></div>
+          <div><dt>Pago</dt><dd>${escapeHtml(order.payment_method_title || '')}</dd></div>
+          <div><dt>Cliente</dt><dd>${escapeHtml(order.billing?.name || '')}</dd></div>
+          <div><dt>Email</dt><dd>${escapeHtml(order.billing?.email || '')}</dd></div>
+          <div><dt>Direccion</dt><dd>${escapeHtml(order.billing?.address || '')}</dd></div>
+        </dl>
+        <div class="modal-items">
+          ${(order.items || []).map((item) => `
+            <article>
+              <strong>${escapeHtml(item.name)}</strong>
+              <span>${Number(item.quantity || 1)} x ${escapeHtml(item.total || '')}</span>
+            </article>
+          `).join('')}
+        </div>
+      `;
+      modalBackdrop.hidden = false;
+      modal.showModal();
+    };
+
+    const closeModal = () => {
+      modal?.close();
+      if (modalBackdrop) modalBackdrop.hidden = true;
+    };
+
+    ordersSearch?.addEventListener('submit', (event) => event.preventDefault());
+    ordersQuery?.addEventListener('input', () => {
+      const query = ordersQuery.value.trim().toLowerCase();
+      filteredOrders = query ? allOrders.filter((order) => orderSearchText(order).includes(query)) : allOrders;
+      currentPage = 1;
+      renderOrdersTable();
+    });
+
+    pagination?.querySelector('[data-pagination-prev]')?.addEventListener('click', () => {
+      currentPage = Math.max(1, currentPage - 1);
+      renderOrdersTable();
+    });
+
+    pagination?.querySelector('[data-pagination-next]')?.addEventListener('click', () => {
+      currentPage += 1;
+      renderOrdersTable();
+    });
+
+    modalClose?.addEventListener('click', closeModal);
+    modalBackdrop?.addEventListener('click', closeModal);
+    modal?.addEventListener('close', () => {
+      if (modalBackdrop) modalBackdrop.hidden = true;
+    });
 
     fetch(meUrl, { credentials: 'include' })
       .then(async (response) => {
         if (!response.ok) throw new Error('Debes iniciar sesion.');
         const payload = await response.json();
         if (!payload.data?.can_access_backoffice) throw new Error('Sin permisos.');
+        const salesResponse = await fetch(salesUrl, { credentials: 'include' });
+        const salesPayload = await salesResponse.json();
+        if (!salesResponse.ok) throw new Error(salesPayload.message || 'No se pudieron cargar las ventas.');
+        renderSales(salesPayload.data || {});
         if (loading) loading.hidden = true;
         if (page) page.hidden = false;
       })
@@ -196,6 +378,64 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     padding: 18px;
   }
 
+  .orders-table-card {
+    display: grid;
+    grid-column: 1 / -1;
+    gap: 12px;
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-item);
+    padding: 18px;
+  }
+
+  .orders-search input {
+    width: 100%;
+  }
+
+  .orders-table {
+    display: grid;
+    gap: 1px;
+    overflow: hidden;
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-item);
+    background: var(--color-hairline);
+  }
+
+  :global(.orders-row) {
+    display: grid;
+    grid-template-columns: 1fr 1.1fr auto auto auto;
+    gap: 14px;
+    align-items: center;
+    background: var(--color-canvas);
+    padding: 12px;
+  }
+
+  :global(.orders-row-head) {
+    background: var(--color-surface-soft);
+    color: var(--color-muted);
+    font-size: 0.78rem;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  :global(.orders-row div) {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  :global(.orders-row span) {
+    color: var(--color-body);
+    font-size: 0.88rem;
+    font-weight: 700;
+  }
+
+  :global(.status-pill) {
+    border-radius: var(--radius-pill);
+    background: var(--color-surface-strong);
+    padding: 7px 10px;
+    white-space: nowrap;
+  }
+
   .chart-head {
     display: flex;
     align-items: center;
@@ -215,32 +455,55 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
   .chart {
     display: grid;
-    grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-template-columns: 44px minmax(0, 1fr);
     gap: 12px;
     height: 220px;
-    align-items: end;
-    border-bottom: 1px solid var(--color-hairline);
-    padding-top: 12px;
+    padding-top: 8px;
   }
 
-  .chart span {
+  :global(.chart-scale) {
+    display: grid;
+    grid-template-rows: repeat(5, 1fr);
+    align-items: center;
+    color: var(--color-muted);
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-align: right;
+  }
+
+  :global(.chart-bars) {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(30, minmax(4px, 1fr));
+    gap: 4px;
+    align-items: end;
+    border-bottom: 1px solid var(--color-hairline);
+    background:
+      linear-gradient(to bottom, transparent calc(25% - 1px), var(--color-hairline) 25%, transparent calc(25% + 1px)),
+      linear-gradient(to bottom, transparent calc(50% - 1px), var(--color-hairline) 50%, transparent calc(50% + 1px)),
+      linear-gradient(to bottom, transparent calc(75% - 1px), var(--color-hairline) 75%, transparent calc(75% + 1px));
+    padding-top: 6px;
+  }
+
+  :global(.chart-bars > span) {
     position: relative;
     display: block;
-    min-height: 28px;
+    min-height: 8px;
     height: calc(var(--value) * 1%);
-    border-radius: 8px 8px 0 0;
+    border-radius: 6px 6px 0 0;
     background: linear-gradient(180deg, var(--color-primary), #05b169);
   }
 
-  .chart span::after {
+  :global(.chart-bars > span::after) {
     content: attr(data-label);
     position: absolute;
-    bottom: -28px;
+    bottom: -24px;
     left: 50%;
     color: var(--color-body);
-    font-size: 0.82rem;
+    font-size: 0.68rem;
     font-weight: 800;
     transform: translateX(-50%);
+    white-space: nowrap;
   }
 
   .notice {
@@ -248,9 +511,101 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     margin: 8px 0 0;
   }
 
+  .sales-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 39;
+    background: rgba(0, 0, 0, 0.35);
+  }
+
+  .sales-modal-backdrop[hidden] {
+    display: none;
+  }
+
+  .sales-modal {
+    width: min(720px, calc(100vw - 32px));
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-item);
+    background: var(--color-canvas);
+    padding: 0;
+  }
+
+  .sales-modal::backdrop {
+    background: transparent;
+  }
+
+  .modal-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    border-bottom: 1px solid var(--color-hairline);
+    padding: 18px;
+  }
+
+  .modal-head h2 {
+    margin: 0;
+  }
+
+  .modal-body {
+    display: grid;
+    gap: 16px;
+    padding: 18px;
+  }
+
+  :global(.modal-data) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1px;
+    overflow: hidden;
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-item);
+    background: var(--color-hairline);
+  }
+
+  :global(.modal-data div) {
+    background: var(--color-canvas);
+    padding: 12px;
+  }
+
+  :global(.modal-data dt) {
+    color: var(--color-muted);
+    font-size: 0.78rem;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  :global(.modal-data dd) {
+    margin: 4px 0 0;
+    overflow-wrap: anywhere;
+    font-weight: 700;
+  }
+
+  :global(.modal-items) {
+    display: grid;
+    gap: 1px;
+    overflow: hidden;
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-item);
+    background: var(--color-hairline);
+  }
+
+  :global(.modal-items article) {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    background: var(--color-canvas);
+    padding: 12px;
+  }
+
   @media (max-width: 860px) {
     .sales-shell,
     .sales-panel {
+      grid-template-columns: 1fr;
+    }
+
+    :global(.orders-row),
+    :global(.modal-data) {
       grid-template-columns: 1fr;
     }
   }

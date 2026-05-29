@@ -222,6 +222,10 @@ final class TCG_Platform_API
         if (class_exists('TCG_Platform_API_Checkout')) {
             TCG_Platform_API_Checkout::register_routes(self::NAMESPACE);
         }
+
+        if (class_exists('TCG_Platform_API_Orders')) {
+            TCG_Platform_API_Orders::register_routes(self::NAMESPACE);
+        }
     }
 
     public static function register_user(WP_REST_Request $request): WP_REST_Response|WP_Error

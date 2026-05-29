@@ -2,6 +2,7 @@
 import BackButton from '../components/BackButton.astro';
 import SiteHeader from '../components/SiteHeader.astro';
 import { siteConfig } from '../config/site';
+import { tcgApi } from '../lib/tcg-api';
 import BaseLayout from '../layouts/BaseLayout.astro';
 ---
 
@@ -13,7 +14,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         <BackButton fallback="/perfil" />
         <p class="eyebrow">Cuenta</p>
         <h1>Mis pedidos</h1>
-        <p class="lede">Vista base preparada para conectar pedidos reales de WooCommerce cuando el checkout este activo.</p>
+        <p class="lede">Pedidos reales creados en WooCommerce desde tu cuenta.</p>
       </div>
       <section class="orders-panel">
         <div class="orders-skeleton" id="orders-skeleton" aria-hidden="true">
@@ -23,7 +24,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         </div>
         <div class="empty" id="orders-empty" hidden>
           <h2>No hay pedidos todavia</h2>
-          <p>Cuando se conecte el checkout, aqui se listaran pedidos, estados, importes y enlaces de detalle.</p>
+          <p>Cuando completes una compra, aqui se listaran estados, importes y productos.</p>
           <a class="button button-primary" href="/tienda">Ir a tienda</a>
         </div>
         <div class="orders-list" id="orders-list"></div>
@@ -31,35 +32,55 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     </section>
   </main>
 
-  <script is:inline>
-    const orderKey = 'tcg.last-order';
+  <script define:vars={{ ordersUrl: tcgApi.orders }}>
     const skeleton = document.querySelector('#orders-skeleton');
     const empty = document.querySelector('#orders-empty');
     const list = document.querySelector('#orders-list');
 
-    try {
-      const order = JSON.parse(localStorage.getItem(orderKey) || 'null');
-      if (order && list && empty) {
-        skeleton.hidden = true;
-        empty.hidden = true;
-        list.innerHTML = `
-          <article class="order-card">
-            <div>
-              <strong>${order.id || 'Pedido demo'}</strong>
-              <p>${new Date(order.created_at).toLocaleString('es-ES')}</p>
-            </div>
-            <span>${(order.items || []).length} producto(s)</span>
-            <span>Demo</span>
-          </article>
-        `;
-      } else {
+    const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, (char) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#039;',
+    }[char]));
+
+    const renderOrders = (orders) => {
+      if (!list || !empty) return;
+      skeleton.hidden = true;
+      empty.hidden = orders.length > 0;
+
+      list.innerHTML = orders.map((order) => `
+        <article class="order-card">
+          <div>
+            <strong>Pedido #${escapeHtml(order.number || order.id)}</strong>
+            <p>${order.created_at ? new Date(order.created_at).toLocaleString('es-ES') : ''}</p>
+          </div>
+          <span>${Number(order.item_count || 0)} producto(s)</span>
+          <span class="order-total">${escapeHtml(order.total || '')}</span>
+          <span class="order-status">${escapeHtml(order.status_label || order.status || '')}</span>
+        </article>
+      `).join('');
+    };
+
+    fetch(ordersUrl, { credentials: 'include' })
+      .then(async (response) => {
+        if (response.status === 401 || response.status === 403) {
+          window.location.assign(`/login?next=${encodeURIComponent('/mis-pedidos')}`);
+          return null;
+        }
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.message || 'No se pudieron cargar los pedidos.');
+        return payload.data || [];
+      })
+      .then((orders) => {
+        if (!orders) return;
+        renderOrders(orders);
+      })
+      .catch(() => {
         skeleton.hidden = true;
         if (empty) empty.hidden = false;
-      }
-    } catch {
-      skeleton.hidden = true;
-      if (empty) empty.hidden = false;
-    }
+      });
   </script>
 </BaseLayout>
 
@@ -134,7 +155,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
   :global(.order-card) {
     display: grid;
-    grid-template-columns: 1fr auto auto;
+    grid-template-columns: 1fr auto auto auto;
     gap: 16px;
     align-items: center;
     border: 1px solid var(--color-hairline);
@@ -145,6 +166,20 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   :global(.order-card p) {
     margin: 4px 0 0;
     color: var(--color-body);
+  }
+
+  :global(.order-total),
+  :global(.order-status) {
+    border-radius: var(--radius-pill);
+    background: var(--color-surface-strong);
+    padding: 7px 10px;
+    font-size: 0.84rem;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+
+  :global(.order-total) {
+    color: var(--color-primary);
   }
 
   [hidden] {
