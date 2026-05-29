@@ -17,7 +17,7 @@ import { tcgApi } from '../lib/tcg-api';
             <p class="eyebrow">Checkout starter</p>
             <h1>Finalizar compra</h1>
             <p class="lede">
-              Flujo base sin pasarela real. Requiere cuenta para mantener el historial preparado antes de conectar WooCommerce checkout o un proveedor de pago.
+              Flujo local de pruebas sin pasarela externa. Crea un pedido real en WooCommerce y lo deja en espera.
             </p>
           </div>
 
@@ -59,7 +59,7 @@ import { tcgApi } from '../lib/tcg-api';
             </section>
 
             <p class="status-message" id="checkout-status" aria-live="polite"></p>
-            <button class="button button-primary" id="checkout-submit" type="submit">Crear pedido demo</button>
+            <button class="button button-primary" id="checkout-submit" type="submit">Crear pedido</button>
           </form>
         </section>
       </main>
@@ -72,11 +72,12 @@ import { tcgApi } from '../lib/tcg-api';
   }
 
   <script>
-    import { clearCart, readActiveCart } from '../lib/cart';
+    import { readActiveCart, writeCart } from '../lib/cart';
+    import { csrfHeaders } from '../lib/security';
     import { tcgApi } from '../lib/tcg-api';
 
     const meUrl = tcgApi.me;
-    const orderKey = 'tcg.last-order';
+    const orderKey = 'tcg.last-checkout-order';
     const itemsRoot = document.querySelector('#checkout-items');
     const emptyRoot = document.querySelector('#checkout-empty');
     const form = document.querySelector('#checkout-form');
@@ -121,6 +122,34 @@ import { tcgApi } from '../lib/tcg-api';
       `).join('');
     };
 
+    const createOrder = async () => {
+      const response = await fetch(tcgApi.checkout, {
+        method: 'POST',
+        credentials: 'include',
+        headers: csrfHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(Object.fromEntries(new FormData(form))),
+      });
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        const friendlyMessages = {
+          tcg_checkout_empty_cart: 'El carrito esta vacio. Anade algun producto antes de continuar.',
+          tcg_checkout_product_not_found: 'Uno de los productos ya no esta disponible. Revisa el carrito.',
+          tcg_checkout_product_unavailable: 'Uno de los productos ya no se puede comprar. Revisa el carrito.',
+          tcg_checkout_product_out_of_stock: 'Uno de los productos se ha quedado sin stock. Revisa el carrito.',
+          tcg_checkout_not_enough_stock: 'No queda stock suficiente para una de las cantidades del carrito.',
+          tcg_checkout_woocommerce_missing: 'WooCommerce no esta disponible ahora mismo.',
+          tcg_checkout_order_failed: 'WooCommerce no pudo crear el pedido.',
+        };
+        const message = friendlyMessages[payload.code] || payload.message || 'No se pudo crear el pedido.';
+        const error = new Error(message);
+        error.code = payload.code || '';
+        throw error;
+      }
+
+      return payload.data;
+    };
+
     form?.addEventListener('submit', async (event) => {
       event.preventDefault();
       const isAuthenticated = await requireAuth();
@@ -132,17 +161,24 @@ import { tcgApi } from '../lib/tcg-api';
         return;
       }
 
-      const order = {
-        id: 'TCG-' + Date.now().toString().slice(-8),
-        created_at: new Date().toISOString(),
-        items,
-        customer: Object.fromEntries(new FormData(form)),
-        status: 'demo',
-      };
+      if (submit) submit.disabled = true;
+      if (status) {
+        status.dataset.state = '';
+        status.textContent = 'Creando pedido en WooCommerce...';
+      }
 
-      localStorage.setItem(orderKey, JSON.stringify(order));
-      await clearCart();
-      window.location.assign('/compra-realizada');
+      try {
+        const order = await createOrder();
+        localStorage.setItem(orderKey, JSON.stringify(order));
+        writeCart([]);
+        window.location.assign(`/compra-realizada?order=${encodeURIComponent(order.number || order.id)}`);
+      } catch (error) {
+        if (status) {
+          status.dataset.state = 'error';
+          status.textContent = error instanceof Error ? error.message : 'No se pudo crear el pedido.';
+        }
+        if (submit) submit.disabled = false;
+      }
     });
 
     requireAuth().then(async (isAuthenticated) => {

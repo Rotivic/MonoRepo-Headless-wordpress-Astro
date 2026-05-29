@@ -1,7 +1,10 @@
 ---
 import SiteHeader from '../components/SiteHeader.astro';
 import { siteConfig } from '../config/site';
+import { tcgApi } from '../lib/tcg-api';
 import BaseLayout from '../layouts/BaseLayout.astro';
+
+const wpAdminUrl = siteConfig.apiUrl.replace(/\/wp-json\/?$/, '/wp/wp-admin/');
 ---
 
 <BaseLayout title={`Compra realizada | ${siteConfig.name}`}>
@@ -12,7 +15,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       <div>
         <p class="eyebrow">Pedido creado</p>
         <h1>Compra realizada</h1>
-        <p class="lede">Pantalla de confirmacion starter. Cuando conectes WooCommerce, aqui se mostrara el pedido real devuelto por el checkout.</p>
+        <p class="lede">Pedido real creado en WooCommerce mediante el checkout local de pruebas.</p>
         <div class="actions">
           <a class="button button-primary" href="/mis-pedidos">Ver mis pedidos</a>
           <a class="button button-secondary" href="/tienda">Seguir comprando</a>
@@ -21,29 +24,58 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
       <section class="success-panel">
         <h2>Resumen</h2>
-        <p id="order-id" class="order-id">Pedido demo</p>
+        <p id="order-id" class="order-id">Pedido</p>
+        <p id="order-status" class="order-status"></p>
         <div id="order-items" class="items"></div>
+        <p id="order-total" class="order-total"></p>
+        <a class="button button-secondary wp-order-link" id="wp-order-link" href="#" hidden>Ver pedido en WordPress</a>
       </section>
     </section>
   </main>
 
-  <script is:inline>
-    const orderKey = 'tcg.last-order';
+  <script define:vars={{ meUrl: tcgApi.me, wpAdminUrl }}>
+    const orderKey = 'tcg.last-checkout-order';
     const idRoot = document.querySelector('#order-id');
+    const statusRoot = document.querySelector('#order-status');
     const itemsRoot = document.querySelector('#order-items');
+    const totalRoot = document.querySelector('#order-total');
+    const wpOrderLink = document.querySelector('#wp-order-link');
+
+    const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, (char) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#039;',
+    }[char]));
 
     try {
       const order = JSON.parse(localStorage.getItem(orderKey) || 'null');
       if (order && idRoot && itemsRoot) {
-        idRoot.textContent = order.id || 'Pedido demo';
+        idRoot.textContent = `Pedido #${order.number || order.id}`;
+        if (statusRoot) statusRoot.textContent = `Estado: ${order.status || 'creado'} · Pago: ${order.payment_method_title || 'Local test checkout'}`;
+        if (totalRoot) totalRoot.textContent = order.total ? `Total ${order.total}` : '';
+        if (wpOrderLink && order.id) {
+          wpOrderLink.href = `${wpAdminUrl}admin.php?page=wc-orders&action=edit&id=${encodeURIComponent(order.id)}`;
+        }
         itemsRoot.innerHTML = (order.items || []).map((item) => `
           <article class="order-line">
-            <strong>${item.name}</strong>
-            <span>${item.price} x ${item.quantity}</span>
+            <strong>${escapeHtml(item.name)}</strong>
+            <span>${escapeHtml(item.total || item.subtotal || '')} x ${Number(item.quantity || 1)}</span>
           </article>
         `).join('');
       }
     } catch {}
+
+    if (wpOrderLink) {
+      fetch(meUrl, { credentials: 'include' })
+        .then(async (response) => {
+          if (!response.ok) return;
+          const payload = await response.json();
+          wpOrderLink.hidden = !payload.data?.can_access_backoffice || !wpOrderLink.getAttribute('href') || wpOrderLink.getAttribute('href') === '#';
+        })
+        .catch(() => {});
+    }
   </script>
 </BaseLayout>
 
@@ -94,9 +126,20 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     padding: 22px;
   }
 
-  .order-id {
+  .order-id,
+  .order-status,
+  .order-total {
     color: var(--color-body);
     font-weight: 800;
+  }
+
+  .order-status {
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+
+  .wp-order-link {
+    margin-top: 14px;
   }
 
   :global(.order-line) {

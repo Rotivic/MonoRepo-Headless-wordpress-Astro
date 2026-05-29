@@ -13,4 +13,5 @@ if (! defined('ABSPATH')) {
 
 require_once __DIR__ . '/tcg-api/modules/Wishlist.php';
 require_once __DIR__ . '/tcg-api/modules/Cart.php';
+require_once __DIR__ . '/tcg-api/modules/Checkout.php';
 require_once __DIR__ . '/tcg-api/tcg-api.php';

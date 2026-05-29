@@ -22,5 +22,6 @@ export const tcgApi = {
   cart: `${siteConfig.apiUrl}/tcg/v1/cart`,
   cartMerge: `${siteConfig.apiUrl}/tcg/v1/cart/merge`,
   cartItem: (productId: number | string) => `${siteConfig.apiUrl}/tcg/v1/cart/${productId}`,
+  checkout: `${siteConfig.apiUrl}/tcg/v1/checkout`,
   adminUsers: `${siteConfig.apiUrl}/tcg/v1/admin/users`,
 };

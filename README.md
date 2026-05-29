@@ -487,6 +487,7 @@ PATCH /wp-json/tcg/v1/cart/{product_id}
 DELETE /wp-json/tcg/v1/cart/{product_id}
 DELETE /wp-json/tcg/v1/cart
 POST /wp-json/tcg/v1/cart/merge
+POST /wp-json/tcg/v1/checkout
 ```
 
 El 2FA usa TOTP compatible con aplicaciones autenticadoras. Al activarlo, la web muestra QR, secreto manual y codigos de recuperacion de un solo uso. Los codigos solo se muestran al activar y se guardan hasheados.
@@ -499,7 +500,7 @@ Por defecto se mantiene una sesion activa por `device_name`. Cada nuevo login o 
 
 Esta API debe ser tambien la base para Astro cuando necesite trabajar con usuario autenticado. La web puede consumir contenido publico con endpoints nativos de WordPress (`/wp-json/wp/v2/...`) y usar `/wp-json/tcg/v1/...` para login, cuenta, wishlist, compras, ventas o cualquier dato privado compartido con la app.
 
-La API propia vive como mu-plugin de aplicacion y se puede ampliar por modulos de dominio dentro de `apps/backend/web/app/mu-plugins/tcg-api/modules`. Wishlist usa este patron con `TCG_Platform_API_Wishlist`: guarda relaciones `user_id` + `product_id` en la tabla `wp_tcg_wishlist_items`, mientras que nombre, precio, imagen, enlace y stock se leen desde WooCommerce al responder. Cart usa `TCG_Platform_API_Cart` con la tabla `wp_tcg_cart_items`, guarda `user_id` + `product_id` + `quantity`, valida producto/stock antes de persistir y expone `/cart/merge` para fusionar el carrito invitado al iniciar sesion o registrarse.
+La API propia vive como mu-plugin de aplicacion y se puede ampliar por modulos de dominio dentro de `apps/backend/web/app/mu-plugins/tcg-api/modules`. Wishlist usa este patron con `TCG_Platform_API_Wishlist`: guarda relaciones `user_id` + `product_id` en la tabla `wp_tcg_wishlist_items`, mientras que nombre, precio, imagen, enlace y stock se leen desde WooCommerce al responder. Cart usa `TCG_Platform_API_Cart` con la tabla `wp_tcg_cart_items`, guarda `user_id` + `product_id` + `quantity`, valida producto/stock antes de persistir y expone `/cart/merge` para fusionar el carrito invitado al iniciar sesion o registrarse. Checkout usa `TCG_Platform_API_Checkout` para convertir el carrito autenticado en un pedido real de WooCommerce en entorno local de pruebas.
 
 Buenas practicas aplicadas en la capa inicial:
 
@@ -553,9 +554,9 @@ Rutas Astro iniciales para tienda:
 /usuarios
 ```
 
-Estas rutas son una base visual y funcional ligera. La tienda lee productos desde WooCommerce Store API, el producto usa `slug` por query string para no depender de rutas generadas en build, y el carrito guarda una seleccion local temporal solo para invitados. Al iniciar sesion o registrarse, el carrito invitado se fusiona contra `/wp-json/tcg/v1/cart/merge` y pasa a quedar vinculado a la cuenta. Wishlist requiere sesion y se persiste en WordPress mediante `/wp-json/tcg/v1/wishlist`. Pedidos queda como placeholder para conectarlo al checkout real, y checkout/compra realizada simulan el flujo sin pasarela externa.
+Estas rutas son una base visual y funcional ligera. La tienda lee productos desde WooCommerce Store API, el producto usa `slug` por query string para no depender de rutas generadas en build, y el carrito guarda una seleccion local temporal solo para invitados. Al iniciar sesion o registrarse, el carrito invitado se fusiona contra `/wp-json/tcg/v1/cart/merge` y pasa a quedar vinculado a la cuenta. Wishlist requiere sesion y se persiste en WordPress mediante `/wp-json/tcg/v1/wishlist`. Checkout crea un pedido real de WooCommerce mediante `/wp-json/tcg/v1/checkout` usando el metodo local `tcg_local_test`, deja el pedido en estado `on-hold`, reduce stock y muestra la confirmacion con el pedido devuelto por WooCommerce.
 
-Regla de stock para el carrito persistente: el carrito representa intencion, no reserva inventario. La API valida disponibilidad/cantidad al guardar, pero WooCommerce debe volver a validar disponibilidad y precio al crear pedido/checkout; si se usa reserva temporal, debe ocurrir en pedido pendiente/draft o durante checkout, no al anadir al carrito.
+Regla de stock para el carrito persistente: el carrito representa intencion, no reserva inventario. La API valida disponibilidad/cantidad al guardar y vuelve a validar justo antes de crear pedido. En el checkout local de pruebas se reduce stock al crear el pedido WooCommerce; si mas adelante se usa reserva temporal o pasarela real, debe ocurrir en pedido pendiente/draft o durante checkout, no al anadir al carrito.
 
 `/inventario`, `/ventas`, `/admin` y `/usuarios` son vistas de backoffice frontend. Estan pensadas como lectura, resumen o lanzadera hacia WordPress, no como sustituto completo de `wp-admin`. La regla de la plantilla es: WordPress gestiona contenido, productos, stock, pedidos, usuarios y configuracion; Astro muestra datos utiles, flujos de usuario y acciones controladas que tengan sentido fuera del panel. El listado de usuarios es solo para administradores y enlaza cada fila al editor real de WordPress.
 

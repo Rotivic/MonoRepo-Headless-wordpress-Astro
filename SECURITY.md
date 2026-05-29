@@ -35,6 +35,7 @@ Este proyecto separa dos modos de autenticacion:
 - Las acciones desde mobile deben usar `Authorization: Bearer`.
 - No exponer datos internos de WordPress si el frontend solo necesita un subconjunto.
 - Carrito y wishlist deben guardar relaciones/cantidades propias, pero leer nombre, precio, stock e imagen desde WooCommerce para evitar datos duplicados o incongruentes.
+- Checkout debe revalidar el carrito en backend justo antes de crear pedido, aunque el carrito ya validara stock al guardar.
 - No crear edicion sensible en Astro si WordPress ya la gestiona mejor.
 
 ## Antes de desplegar
