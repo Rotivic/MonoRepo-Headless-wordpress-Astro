@@ -34,6 +34,7 @@ Este proyecto separa dos modos de autenticacion:
 - Las acciones con estado desde Astro deben enviar `X-TCG-CSRF` usando `csrfHeaders()`.
 - Las acciones desde mobile deben usar `Authorization: Bearer`.
 - No exponer datos internos de WordPress si el frontend solo necesita un subconjunto.
+- Carrito y wishlist deben guardar relaciones/cantidades propias, pero leer nombre, precio, stock e imagen desde WooCommerce para evitar datos duplicados o incongruentes.
 - No crear edicion sensible en Astro si WordPress ya la gestiona mejor.
 
 ## Antes de desplegar

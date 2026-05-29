@@ -71,8 +71,11 @@ import { tcgApi } from '../lib/tcg-api';
     )
   }
 
-  <script is:inline define:vars={{ meUrl: tcgApi.me }}>
-    const cartKey = 'tcg.cart.items';
+  <script>
+    import { clearCart, readActiveCart } from '../lib/cart';
+    import { tcgApi } from '../lib/tcg-api';
+
+    const meUrl = tcgApi.me;
     const orderKey = 'tcg.last-order';
     const itemsRoot = document.querySelector('#checkout-items');
     const emptyRoot = document.querySelector('#checkout-empty');
@@ -80,9 +83,7 @@ import { tcgApi } from '../lib/tcg-api';
     const status = document.querySelector('#checkout-status');
     const submit = document.querySelector('#checkout-submit');
 
-    const readCart = () => {
-      try { return JSON.parse(localStorage.getItem(cartKey) || '[]'); } catch { return []; }
-    };
+    let checkoutItems = [];
 
     const redirectToLogin = () => {
       window.location.assign(`/login?next=${encodeURIComponent('/checkout')}`);
@@ -106,8 +107,7 @@ import { tcgApi } from '../lib/tcg-api';
       }
     };
 
-    const render = () => {
-      const items = readCart();
+    const render = (items = checkoutItems) => {
       const hasItems = items.length > 0;
       if (emptyRoot) emptyRoot.hidden = hasItems;
       if (submit) submit.disabled = !hasItems;
@@ -126,7 +126,7 @@ import { tcgApi } from '../lib/tcg-api';
       const isAuthenticated = await requireAuth();
       if (!isAuthenticated) return;
 
-      const items = readCart();
+      const items = checkoutItems;
       if (!items.length) {
         if (status) status.textContent = 'Anade productos antes de continuar.';
         return;
@@ -141,13 +141,14 @@ import { tcgApi } from '../lib/tcg-api';
       };
 
       localStorage.setItem(orderKey, JSON.stringify(order));
-      localStorage.removeItem(cartKey);
-      window.dispatchEvent(new CustomEvent('tcg:cart-updated'));
+      await clearCart();
       window.location.assign('/compra-realizada');
     });
 
-    requireAuth().then((isAuthenticated) => {
-      if (isAuthenticated) render();
+    requireAuth().then(async (isAuthenticated) => {
+      if (!isAuthenticated) return;
+      checkoutItems = await readActiveCart();
+      render(checkoutItems);
     });
   </script>
 </BaseLayout>

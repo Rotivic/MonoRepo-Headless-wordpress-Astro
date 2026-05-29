@@ -19,5 +19,8 @@ export const tcgApi = {
   twoFactorVerify: `${siteConfig.apiUrl}/tcg/v1/2fa/verify`,
   wishlist: `${siteConfig.apiUrl}/tcg/v1/wishlist`,
   wishlistItem: (productId: number | string) => `${siteConfig.apiUrl}/tcg/v1/wishlist/${productId}`,
+  cart: `${siteConfig.apiUrl}/tcg/v1/cart`,
+  cartMerge: `${siteConfig.apiUrl}/tcg/v1/cart/merge`,
+  cartItem: (productId: number | string) => `${siteConfig.apiUrl}/tcg/v1/cart/${productId}`,
   adminUsers: `${siteConfig.apiUrl}/tcg/v1/admin/users`,
 };

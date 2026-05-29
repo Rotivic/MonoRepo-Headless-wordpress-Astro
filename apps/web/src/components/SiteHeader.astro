@@ -105,7 +105,7 @@ const { active = 'home' } = Astro.props;
   </>
 )}
 
-<script is:inline define:vars={{ meUrl: tcgApi.me, logoutUrl: tcgApi.logout, wishlistUrl: tcgApi.wishlist, shopEnabled: siteConfig.features.shop }}>
+<script is:inline define:vars={{ meUrl: tcgApi.me, logoutUrl: tcgApi.logout, wishlistUrl: tcgApi.wishlist, cartUrl: tcgApi.cart, shopEnabled: siteConfig.features.shop }}>
   const navActions = document.querySelector('.nav-actions');
   const guestItems = document.querySelectorAll('.session-guest');
   const userMenu = document.querySelector('#user-menu');
@@ -244,8 +244,27 @@ const { active = 'home' } = Astro.props;
   // --- Cart ---
   const cartKey = 'tcg.cart.items';
   const loginCartUrl = '/login?next=%2Fcarrito';
-  const readCart = () => {
+  let canvasCartItems = null;
+  const readLocalCart = () => {
     try { return JSON.parse(localStorage.getItem(cartKey) || '[]'); } catch { return []; }
+  };
+  const writeLocalCart = (items) => {
+    try { localStorage.setItem(cartKey, JSON.stringify(items)); } catch {}
+  };
+  const readCart = async () => {
+    try {
+      if (localStorage.getItem(authKey) === '1') {
+        const response = await fetch(cartUrl, { credentials: 'include' });
+        if (!response.ok) throw new Error('Cart API failed');
+        const payload = await response.json();
+        canvasCartItems = payload.data || [];
+        writeLocalCart(canvasCartItems);
+        return canvasCartItems;
+      }
+    } catch {}
+
+    canvasCartItems = readLocalCart();
+    return canvasCartItems;
   };
 
   let canvasWishlistIds = null;
@@ -333,9 +352,10 @@ const { active = 'home' } = Astro.props;
   const canvasLoading = document.querySelector('#canvas-loading');
   let canvasRenderId = 0;
 
-  const updateBadge = () => {
+  const updateBadge = async () => {
     if (!badge) return;
-    const total = readCart().reduce((s, i) => s + (i.quantity || 1), 0);
+    const items = canvasCartItems || await readCart();
+    const total = items.reduce((s, i) => s + (i.quantity || 1), 0);
     badge.textContent = String(total > 99 ? '99+' : total);
     badge.classList.toggle('visible', total > 0);
   };
@@ -349,7 +369,7 @@ const { active = 'home' } = Astro.props;
 
   const renderCanvas = async () => {
     const renderId = ++canvasRenderId;
-    const items = readCart();
+    const items = await readCart();
     const hasItems = items.length > 0;
 
     setCanvasLoading(true);
@@ -403,10 +423,26 @@ const { active = 'home' } = Astro.props;
     });
 
     canvasItems.querySelectorAll('.canvas-remove').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const updated = readCart().filter((i) => i.id !== Number(btn.dataset.id));
-        try { localStorage.setItem(cartKey, JSON.stringify(updated)); } catch {}
-        window.dispatchEvent(new CustomEvent('tcg:cart-updated'));
+      btn.addEventListener('click', async () => {
+        const productId = Number(btn.dataset.id);
+        try {
+          if (localStorage.getItem(authKey) === '1') {
+            const response = await fetch(`${cartUrl}/${productId}`, {
+              method: 'DELETE',
+              credentials: 'include',
+              headers: csrfHeaders(),
+            });
+            if (!response.ok) throw new Error('Cart API failed');
+            const payload = await response.json();
+            canvasCartItems = payload.data || [];
+          } else {
+            canvasCartItems = readLocalCart().filter((i) => Number(i.id) !== productId);
+          }
+        } catch {
+          canvasCartItems = readLocalCart().filter((i) => Number(i.id) !== productId);
+        }
+        writeLocalCart(canvasCartItems);
+        window.dispatchEvent(new CustomEvent('tcg:cart-updated', { detail: { items: canvasCartItems } }));
         renderCanvas();
         updateBadge();
       });
@@ -432,7 +468,16 @@ const { active = 'home' } = Astro.props;
   document.querySelector('#canvas-close')?.addEventListener('click', closeCanvas);
   backdrop?.addEventListener('click', closeCanvas);
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCanvas(); });
-  window.addEventListener('tcg:cart-updated', () => { updateBadge(); if (canvas?.classList.contains('open')) renderCanvas(); });
+  window.addEventListener('tcg:cart-updated', (event) => {
+    if (Array.isArray(event.detail?.items)) {
+      canvasCartItems = event.detail.items;
+      writeLocalCart(canvasCartItems);
+    } else {
+      canvasCartItems = null;
+    }
+    updateBadge();
+    if (canvas?.classList.contains('open')) renderCanvas();
+  });
   window.addEventListener('tcg:wishlist-updated', (event) => {
     const detail = event.detail || {};
     const productId = Number(detail.productId);

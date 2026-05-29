@@ -56,9 +56,9 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
   <script>
     import { setupLocalPagination } from '../../lib/pagination';
     import { formatStorePrice, shopApi } from '../../lib/shop';
+    import { addCartItem } from '../../lib/cart';
     import { addWishlistItem, readWishlist, removeWishlistItem } from '../../lib/wishlist';
 
-    const _cartKey = 'tcg.cart.items';
     const _wishlistKey = 'tcg.wishlist.items';
     const _loginUrl = `/login?next=${encodeURIComponent('/tienda')}`;
     const _shopCacheKey = 'tcg.shop.products.cache';
@@ -136,36 +136,30 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       `;
     };
 
-    const _addCartItem = (item) => {
-      try {
-        const raw = localStorage.getItem(_cartKey);
-        const items = raw ? JSON.parse(raw) : [];
-        const existing = items.find((i) => i.id === item.id);
-        if (existing) {
-          existing.quantity += item.quantity;
-        } else {
-          items.push(item);
-        }
-        localStorage.setItem(_cartKey, JSON.stringify(items));
-        window.dispatchEvent(new CustomEvent('tcg:cart-updated'));
-      } catch {}
-    };
-
     const _bindProductActions = () => {
       document.querySelectorAll('.add-to-cart').forEach((button) => {
-      button.addEventListener('click', () => {
-        _addCartItem({
-          id: Number(button.dataset.id),
-          slug: button.dataset.slug || '',
-          name: button.dataset.name || 'Producto',
-          price: button.dataset.price || '-',
-          image: button.dataset.image || undefined,
-          quantity: 1,
-        });
-        button.textContent = 'Anadido';
-        window.setTimeout(() => { button.textContent = 'Anadir'; }, 1200);
+        button.addEventListener('click', async () => {
+          button.disabled = true;
+          try {
+            await addCartItem({
+              id: Number(button.dataset.id),
+              slug: button.dataset.slug || '',
+              name: button.dataset.name || 'Producto',
+              price: button.dataset.price || '-',
+              image: button.dataset.image || undefined,
+              quantity: 1,
+            });
+            button.textContent = 'Anadido';
+          } catch (error) {
+            button.textContent = error instanceof Error ? error.message : 'No se pudo anadir';
+          } finally {
+            window.setTimeout(() => {
+              button.disabled = false;
+              button.textContent = 'Anadir';
+            }, 1200);
+          }
+          });
       });
-    });
       document.querySelectorAll('.add-to-wishlist').forEach((button) => {
         button.addEventListener('click', async () => {
           if (!_requireWishlistAuth()) return;

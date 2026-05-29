@@ -9,7 +9,7 @@ if (! defined('ABSPATH')) {
 final class TCG_Platform_API
 {
     private const NAMESPACE = 'tcg/v1';
-    private const DB_VERSION = '2';
+    private const DB_VERSION = '3';
     private const DB_VERSION_OPTION = 'tcg_api_db_version';
     private const TOKEN_TTL = 30 * DAY_IN_SECONDS;
     private const LOGIN_LIMIT = 5;
@@ -92,6 +92,10 @@ final class TCG_Platform_API
 
         if (class_exists('TCG_Platform_API_Wishlist')) {
             TCG_Platform_API_Wishlist::install();
+        }
+
+        if (class_exists('TCG_Platform_API_Cart')) {
+            TCG_Platform_API_Cart::install();
         }
     }
 
@@ -209,6 +213,10 @@ final class TCG_Platform_API
 
         if (class_exists('TCG_Platform_API_Wishlist')) {
             TCG_Platform_API_Wishlist::register_routes(self::NAMESPACE);
+        }
+
+        if (class_exists('TCG_Platform_API_Cart')) {
+            TCG_Platform_API_Cart::register_routes(self::NAMESPACE);
         }
     }
 

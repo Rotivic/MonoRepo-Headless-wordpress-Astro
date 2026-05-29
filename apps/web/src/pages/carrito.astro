@@ -47,23 +47,12 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   }
 
   <script>
+    import { clearCart, readActiveCart, removeCartItem } from '../lib/cart';
     import { addWishlistItem, readWishlist } from '../lib/wishlist';
 
-    const _cartKey = 'tcg.cart.items';
     const _loginUrl = `/login?next=${encodeURIComponent('/carrito')}`;
     let wishlistIds = null;
-
-    const _readCart = () => {
-      try {
-        const raw = localStorage.getItem(_cartKey);
-        return raw ? JSON.parse(raw) : [];
-      } catch { return []; }
-    };
-
-    const _writeCart = (items) => {
-      localStorage.setItem(_cartKey, JSON.stringify(items));
-      window.dispatchEvent(new CustomEvent('tcg:cart-updated'));
-    };
+    let cartItems = [];
 
     const itemsRoot = document.querySelector('#cart-items');
     const emptyRoot = document.querySelector('#cart-empty');
@@ -125,8 +114,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       }
     };
 
-    const renderCart = () => {
-      const items = _readCart();
+    const renderCart = (items = cartItems) => {
       const hasItems = items.length > 0;
 
       if (skeletonRoot) skeletonRoot.hidden = true;
@@ -169,22 +157,24 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       });
 
       itemsRoot.querySelectorAll('.remove-item').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          const updated = _readCart().filter((i) => i.id !== Number(btn.dataset.id));
-          _writeCart(updated);
-          renderCart();
+        btn.addEventListener('click', async () => {
+          cartItems = await removeCartItem(Number(btn.dataset.id));
+          renderCart(cartItems);
         });
       });
     };
 
     if (clearButton) {
-      clearButton.addEventListener('click', () => {
-        _writeCart([]);
-        renderCart();
+      clearButton.addEventListener('click', async () => {
+        cartItems = await clearCart();
+        renderCart(cartItems);
       });
     }
 
-    window.addEventListener('tcg:cart-updated', renderCart);
+    window.addEventListener('tcg:cart-updated', async (event) => {
+      cartItems = Array.isArray(event.detail?.items) ? event.detail.items : await readActiveCart();
+      renderCart(cartItems);
+    });
     window.addEventListener('tcg:wishlist-updated', (event) => {
       const detail = event.detail || {};
       const productId = Number(detail.productId);
@@ -193,9 +183,17 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       if (!(wishlistIds instanceof Set)) wishlistIds = new Set();
       if (detail.action === 'added') wishlistIds.add(productId);
       if (detail.action === 'removed') wishlistIds.delete(productId);
-      renderCart();
+      renderCart(cartItems);
     });
-    hydrateWishlistState().finally(renderCart);
+    Promise.all([hydrateWishlistState(), readActiveCart()])
+      .then(([, items]) => {
+        cartItems = items;
+        renderCart(cartItems);
+      })
+      .catch(() => {
+        cartItems = [];
+        renderCart(cartItems);
+      });
   </script>
 </BaseLayout>
 

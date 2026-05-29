@@ -50,7 +50,12 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     </form>
   </AuthLayout>
 
-  <script define:vars={{ loginUrl: tcgApi.login, twoFactorVerifyUrl: tcgApi.twoFactorVerify }}>
+  <script>
+    import { mergePendingCart } from '../lib/cart';
+    import { tcgApi } from '../lib/tcg-api';
+
+    const loginUrl = tcgApi.login;
+    const twoFactorVerifyUrl = tcgApi.twoFactorVerify;
     const form = document.querySelector('#login-form');
     const status = document.querySelector('#login-status');
     const twoFactorForm = document.querySelector('#two-factor-form');
@@ -122,6 +127,9 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         } catch {
           // The HttpOnly cookie is the source of truth.
         }
+        try {
+          await mergePendingCart();
+        } catch {}
         window.location.assign(redirectTarget);
       } catch (error) {
         status.dataset.state = 'error';
@@ -159,6 +167,9 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         } catch {
           // The HttpOnly cookie is the source of truth.
         }
+        try {
+          await mergePendingCart();
+        } catch {}
         window.location.assign(redirectTarget);
       } catch (error) {
         twoFactorStatus.dataset.state = 'error';

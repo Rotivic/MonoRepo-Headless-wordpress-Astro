@@ -57,7 +57,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     </form>
   </AuthLayout>
 
-  <script define:vars={{ registerUrl: tcgApi.register }}>
+  <script>
+    import { mergePendingCart } from '../lib/cart';
+    import { tcgApi } from '../lib/tcg-api';
+
+    const registerUrl = tcgApi.register;
     const form = document.querySelector('#register-form');
     const status = document.querySelector('#register-status');
     const redirectTarget = (() => {
@@ -115,6 +119,9 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         } catch {
           // The HttpOnly cookie is the source of truth.
         }
+        try {
+          await mergePendingCart();
+        } catch {}
         window.location.assign(redirectTarget);
       } catch (error) {
         status.dataset.state = 'error';

@@ -145,21 +145,32 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       }
     };
 
-    addButton?.addEventListener('click', () => {
+    addButton?.addEventListener('click', async () => {
       if (!currentProduct) {
         return;
       }
 
-      addCartItem({
-        id: currentProduct.id,
-        slug: currentProduct.slug,
-        name: currentProduct.name,
-        price: currentPrice,
-        image: currentProduct.images?.[0]?.src,
-        quantity: 1,
-      });
+      addButton.disabled = true;
 
-      addButton.textContent = 'Anadido al carrito';
+      try {
+        await addCartItem({
+          id: currentProduct.id,
+          slug: currentProduct.slug,
+          name: currentProduct.name,
+          price: currentPrice,
+          image: currentProduct.images?.[0]?.src,
+          quantity: 1,
+        });
+
+        addButton.textContent = 'Anadido al carrito';
+      } catch (error) {
+        addButton.textContent = error instanceof Error ? error.message : 'No se pudo anadir';
+      } finally {
+        window.setTimeout(() => {
+          addButton.disabled = false;
+          addButton.textContent = 'Añadir al carrito';
+        }, 1400);
+      }
     });
 
     loadProduct();
