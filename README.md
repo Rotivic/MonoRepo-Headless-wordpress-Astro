@@ -307,7 +307,11 @@ La plantilla incluye seeds demo para dejar un entorno util desde el primer arran
 npm run backend:seed
 ```
 
-El primer `docker compose up -d --build` ejecuta `scripts/seed-demo-all.php` por defecto. Esto crea contenido de ejemplo, productos demo y usuarios base si no existen:
+El primer `docker compose up -d --build` ejecuta `scripts/seed-demo-all.php` por defecto. Esto crea contenido de ejemplo, un catalogo demo de WooCommerce y usuarios base si no existen.
+
+El seed de tienda crea categorias, etiquetas, atributos globales, marcas como atributo, cupones y productos simples/variables. El catalogo incluye casos pensados para probar la tienda: productos destacados, en rebaja, con stock, bajo stock, agotados y en reserva/backorder.
+
+Usuarios base:
 
 ```text
 admin_demo      admin.demo@example.test       administrator

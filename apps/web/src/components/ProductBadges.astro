@@ -1,0 +1,65 @@
+---
+import { getProductBadges, type ProductBadgeInfo } from '../lib/product-badges';
+
+type Props = ProductBadgeInfo;
+
+const badges = getProductBadges(Astro.props);
+---
+
+{
+  badges.length > 0 && (
+    <div class="product-badges">
+      {badges.map((badge) => (
+        <span class={`badge badge-${badge.variant}`}>{badge.label}</span>
+      ))}
+    </div>
+  )
+}
+
+<style>
+  .product-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .badge-sale {
+    background: #fff0f0;
+    color: #c0392b;
+    border: 1px solid #f5c6c6;
+  }
+
+  .badge-featured {
+    background: #fffbea;
+    color: #92600a;
+    border: 1px solid #f9e3a0;
+  }
+
+  .badge-outofstock {
+    background: var(--color-surface-strong);
+    color: var(--color-muted);
+    border: 1px solid var(--color-hairline);
+  }
+
+  .badge-lowstock {
+    background: #fff7ed;
+    color: #9a3412;
+    border: 1px solid #fed7aa;
+  }
+
+  .badge-backorder {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+  }
+</style>
