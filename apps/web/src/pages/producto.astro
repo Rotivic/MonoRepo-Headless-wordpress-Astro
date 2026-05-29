@@ -28,7 +28,19 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           <article class="product-detail" id="product-detail" hidden>
             <div class="media" id="product-media" />
             <div class="summary">
-              <div id="product-badges" />
+              <div class="badges-row">
+                <div id="product-badges" />
+                <button
+                  id="product-wishlist"
+                  class="wishlist-toggle product-wishlist-btn"
+                  type="button"
+                  aria-label="Guardar en wishlist"
+                  aria-pressed="false"
+                >
+                  <svg class="heart-empty" xmlns="http://www.w3.org/2000/svg" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19.5 12.6 12 20l-7.5-7.4A5 5 0 0 1 12 6a5 5 0 0 1 7.5 6.6Z"/></svg>
+                  <svg class="heart-filled" xmlns="http://www.w3.org/2000/svg" width="19" height="19" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21.2 4.1 13.4A5.55 5.55 0 0 1 12 5.6a5.55 5.55 0 0 1 7.9 7.8L12 21.2Z"/></svg>
+                </button>
+              </div>
               <p class="eyebrow categories" id="product-categories" />
               <h1 id="product-name">Producto</h1>
               <p class="price" id="product-price">-</p>
@@ -66,6 +78,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
   <script>
     import { addCartItem } from '../lib/cart';
+    import { addWishlistItem, readWishlist, removeWishlistItem } from '../lib/wishlist';
     import { formatStorePrice, shopApi, type StoreProduct } from '../lib/shop';
     import { getProductBadgesHtml } from '../lib/product-badges';
 
@@ -87,12 +100,17 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const qtyPlus          = document.querySelector<HTMLButtonElement>('#qty-plus');
     const relatedSection   = document.querySelector<HTMLElement>('#related-section');
     const relatedGrid      = document.querySelector<HTMLElement>('#related-grid');
+    const wishlistBtn      = document.querySelector<HTMLButtonElement>('#product-wishlist');
 
-    const slug = new URLSearchParams(window.location.search).get('slug');
+    const _qs = new URLSearchParams(window.location.search);
+    const slug = _qs.get('slug');
+    const preselectVariationId = parseInt(_qs.get('variation_id') ?? '', 10) || null;
     let currentProduct: StoreProduct | null = null;
     let currentPrice = '-';
     let currentVariationId: number | null = null;
     let _abortVariation: AbortController | null = null;
+    let wishlistIds: Set<number> | null = null;
+    const _loginUrl = `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`;
 
     const _escMap: Record<string, string> = {
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;',
@@ -148,6 +166,63 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       _syncQty();
     };
 
+    // ── Wishlist ─────────────────────────────────────────────────
+
+    const _setWishlistBtn = (btn: HTMLButtonElement, saved: boolean): void => {
+      btn.setAttribute('aria-pressed', saved ? 'true' : 'false');
+      btn.setAttribute('aria-label', saved ? 'Quitar de wishlist' : 'Guardar en wishlist');
+      btn.classList.toggle('is-active', saved);
+      btn.classList.remove('is-error');
+    };
+
+    // Devuelve el ID que debe usarse para la wishlist del producto principal:
+    // variación seleccionada si existe, padre en caso contrario.
+    const _activeWishlistId = (): number =>
+      currentVariationId ?? currentProduct?.id ?? 0;
+
+    const _hydrateWishlist = async (): Promise<void> => {
+      try {
+        const items = await readWishlist() as Array<{ product_id: number | string }>;
+        wishlistIds = new Set<number>(items.map((i) => Number(i.product_id)));
+        if (wishlistBtn) _setWishlistBtn(wishlistBtn, wishlistIds.has(_activeWishlistId()));
+        relatedGrid?.querySelectorAll<HTMLButtonElement>('.add-to-wishlist').forEach((btn) => {
+          _setWishlistBtn(btn, (wishlistIds as Set<number>).has(Number(btn.dataset['id'])));
+        });
+      } catch {
+        wishlistIds = null;
+      }
+    };
+
+    const _requireAuth = (): boolean => {
+      if (wishlistIds instanceof Set) return true;
+      try { if (localStorage.getItem('tcg.authenticated') === '1') return true; } catch { /* ignore */ }
+      window.location.assign(_loginUrl);
+      return false;
+    };
+
+    const _toggleWishlist = async (btn: HTMLButtonElement, productId: number): Promise<void> => {
+      if (!_requireAuth()) return;
+      if (!(wishlistIds instanceof Set)) await _hydrateWishlist();
+      const wasSaved = wishlistIds instanceof Set && wishlistIds.has(productId);
+      btn.disabled = true;
+      try {
+        if (wasSaved) {
+          await removeWishlistItem(productId);
+          (wishlistIds as Set<number>).delete(productId);
+        } else {
+          await addWishlistItem(productId);
+          if (!(wishlistIds instanceof Set)) wishlistIds = new Set<number>();
+          (wishlistIds as Set<number>).add(productId);
+        }
+        _setWishlistBtn(btn, !wasSaved);
+      } catch {
+        btn.classList.add('is-error');
+        window.setTimeout(() => btn.classList.remove('is-error'), 1400);
+      } finally {
+        btn.disabled = false;
+      }
+    };
+
     // ── Variaciones ──────────────────────────────────────────────
 
     const _getSelected = (): Record<string, string> => {
@@ -179,6 +254,10 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         if (priceEl)   priceEl.textContent = formatStorePrice(product.prices);
         if (stockEl)   stockEl.innerHTML   = '';
         currentVariationId = null;
+        // Sin variación seleccionada: corazón refleja el estado del padre.
+        if (wishlistBtn && wishlistIds instanceof Set) {
+          _setWishlistBtn(wishlistBtn, wishlistIds.has(product.id));
+        }
         return;
       }
 
@@ -186,6 +265,9 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       if (!varId) {
         if (addButton) { addButton.disabled = true; addButton.textContent = 'Combinación no disponible'; }
         currentVariationId = null;
+        if (wishlistBtn && wishlistIds instanceof Set) {
+          _setWishlistBtn(wishlistBtn, wishlistIds.has(product.id));
+        }
         return;
       }
 
@@ -210,6 +292,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           addButton.disabled    = outOfStock;
           addButton.textContent = outOfStock ? 'Agotado' : 'Añadir al carrito';
         }
+
+        // Actualizar corazón: refleja si ESTA variación está en la wishlist.
+        if (wishlistBtn && wishlistIds instanceof Set) {
+          _setWishlistBtn(wishlistBtn, wishlistIds.has(varId));
+        }
       } catch (e) {
         if ((e as Error).name === 'AbortError') return;
         if (addButton) { addButton.disabled = true; addButton.textContent = 'Error al cargar variación'; }
@@ -219,7 +306,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
     const _setupVariationSelectors = (product: StoreProduct): void => {
       if (!variationSelectors) return;
-      const varAttrs = product.attributes.filter((a) => a.has_variations);
+      const varAttrs = (product.attributes ?? []).filter((a) => a.has_variations);
       if (!varAttrs.length) return;
 
       variationSelectors.innerHTML = varAttrs.map((attr) => `
@@ -227,7 +314,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           <label class="variation-label">${_esc(attr.name)}</label>
           <select class="variation-select shop-select" data-attr="${_esc(attr.name)}">
             <option value="">Selecciona ${_esc(attr.name)}</option>
-            ${attr.terms.map((t) => `<option value="${_esc(t.name)}">${_esc(t.name)}</option>`).join('')}
+            ${attr.terms.map((t) => `<option value="${_esc(t.slug)}">${_esc(t.name)}</option>`).join('')}
           </select>
         </div>
       `).join('');
@@ -240,6 +327,21 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
       if (addWrap)   addWrap.hidden   = false;
       if (addButton) { addButton.disabled = true; addButton.textContent = 'Selecciona todas las opciones'; }
+
+      // Pre-seleccionar variación si viene de wishlist (?variation_id=...)
+      if (preselectVariationId) {
+        const target = product.variations.find((v) => v.id === preselectVariationId);
+        if (target) {
+          target.attributes.forEach((attr) => {
+            if (!attr.value) return;
+            const sel = variationSelectors?.querySelector<HTMLSelectElement>(
+              `.variation-select[data-attr="${attr.name}"]`
+            );
+            if (sel) sel.value = attr.value;
+          });
+          void _onVariationChange(product);
+        }
+      }
     };
 
     // ── Productos relacionados ────────────────────────────────────
@@ -301,6 +403,12 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           }
         });
       });
+
+      relatedGrid?.querySelectorAll<HTMLButtonElement>('.add-to-wishlist').forEach((btn) => {
+        const id = Number(btn.dataset['id']);
+        if (wishlistIds instanceof Set) _setWishlistBtn(btn, wishlistIds.has(id));
+        btn.addEventListener('click', () => { void _toggleWishlist(btn, id); });
+      });
     };
 
     const _loadRelated = async (p: StoreProduct): Promise<void> => {
@@ -330,9 +438,21 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         const res = await fetch(`${shopApi.products}?slug=${encodeURIComponent(slug)}`);
         if (!res.ok) throw new Error(`WooCommerce respondió con ${res.status}`);
         const list = await res.json() as StoreProduct[];
-        currentProduct = list[0] ?? null;
-        if (!currentProduct) { _setStatus('Producto no encontrado.', 'error'); return; }
+        let product = list[0] ?? null;
+        if (!product) { _setStatus('Producto no encontrado.', 'error'); return; }
 
+        // El endpoint de listado (?slug=) puede devolver atributos incompletos
+        // para productos variables. Refetching por ID garantiza datos completos.
+        if (product.type === 'variable') {
+          try {
+            const detailRes = await fetch(`${shopApi.products}/${product.id}`);
+            if (detailRes.ok) {
+              product = await detailRes.json() as StoreProduct;
+            }
+          } catch { /* usar datos del listado si falla */ }
+        }
+
+        currentProduct = product;
         const p = currentProduct;
         const image = p.images?.[0];
         currentPrice = formatStorePrice(p.prices);
@@ -370,11 +490,19 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         if (skeleton) skeleton.hidden = true;
         if (detail)   detail.hidden   = false;
 
+        void _hydrateWishlist();
         void _loadRelated(p);
       } catch (e) {
         _setStatus(e instanceof Error ? e.message : 'No se pudo cargar el producto.', 'error');
       }
     };
+
+    // ── Wishlist botón principal ──────────────────────────────────
+    // Suscrito una sola vez al inicio; lee currentProduct en el momento del click.
+    wishlistBtn?.addEventListener('click', () => {
+      if (!currentProduct || !wishlistBtn) return;
+      void _toggleWishlist(wishlistBtn, _activeWishlistId());
+    });
 
     // ── Controles de cantidad ─────────────────────────────────────
 
@@ -433,6 +561,46 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     });
 
     void _loadProduct();
+
+    // ── Bus de wishlist ───────────────────────────────────────────
+    // Escucha cambios de cualquier vista (off-canvas, tienda, wishlist…)
+    // y sincroniza los botones de corazón de esta página sin re-fetch.
+    window.addEventListener('tcg:wishlist-updated', (event: Event) => {
+      const ev = event as CustomEvent<{ productId?: number | string; action?: string } | null>;
+      const detail = ev.detail;
+
+      if (detail?.productId && detail?.action) {
+        // Actualización incremental: un item concreto cambió
+        const id     = Number(detail.productId);
+        const added  = detail.action === 'added';
+
+        if (!(wishlistIds instanceof Set)) wishlistIds = new Set<number>();
+        if (added) (wishlistIds as Set<number>).add(id);
+        else       (wishlistIds as Set<number>).delete(id);
+
+        // Botón principal: coincide si el ID es el activo (variación seleccionada o padre)
+        if (wishlistBtn && _activeWishlistId() === id) {
+          _setWishlistBtn(wishlistBtn, added);
+        }
+
+        // Botones de productos relacionados
+        relatedGrid?.querySelectorAll<HTMLButtonElement>(`.add-to-wishlist[data-id="${id}"]`).forEach((btn) => {
+          _setWishlistBtn(btn, added);
+        });
+      } else {
+        // Sin detail → refresco total (logout, acción externa…)
+        wishlistIds = null;
+        if (currentProduct) {
+          // Si ya tenemos el producto cargado, re-hidratamos en lugar de dejar vacío.
+          void _hydrateWishlist();
+        } else {
+          if (wishlistBtn) _setWishlistBtn(wishlistBtn, false);
+          relatedGrid?.querySelectorAll<HTMLButtonElement>('.add-to-wishlist').forEach((btn) => {
+            _setWishlistBtn(btn, false);
+          });
+        }
+      }
+    });
   </script>
 </BaseLayout>
 
@@ -522,6 +690,56 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     font-size: 5rem;
     font-weight: 800;
   }
+
+  .badges-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 28px;
+  }
+
+  :global(.product-wishlist-btn) {
+    flex-shrink: 0;
+    margin-left: auto;
+    appearance: none;
+    display: inline-grid;
+    width: 36px;
+    height: 36px;
+    place-items: center;
+    padding: 0;
+    border: 1px solid var(--color-hairline);
+    border-radius: 50%;
+    background: var(--color-canvas);
+    color: var(--color-body);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, color 0.15s;
+  }
+
+  :global(.product-wishlist-btn:hover),
+  :global(.product-wishlist-btn[aria-pressed="true"]),
+  :global(.product-wishlist-btn.is-active) {
+    border-color: #f2b8c0;
+    background: #fff5f6;
+    color: var(--color-danger);
+  }
+
+  /* ocultar heart-filled por defecto, heart-empty cuando activo */
+  :global(.product-wishlist-btn .heart-filled)             { display: none; }
+  :global(.product-wishlist-btn[aria-pressed="true"] .heart-empty),
+  :global(.product-wishlist-btn.is-active .heart-empty)    { display: none; }
+
+  /* mostrar heart-filled cuando activo */
+  :global(.product-wishlist-btn[aria-pressed="true"] .heart-filled),
+  :global(.product-wishlist-btn.is-active .heart-filled)   { display: block; }
+
+  :global(.product-wishlist-btn.is-error) {
+    border-color: var(--color-danger);
+    background: #fde8e8;
+    color: var(--color-danger);
+  }
+
+  :global(.product-wishlist-btn:disabled) { cursor: wait; opacity: 0.7; }
 
   .summary {
     display: flex;

@@ -102,6 +102,9 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         const image = escapeHtml(item.image);
         const price = escapeHtml(item.price);
         const slug = encodeURIComponent(item.slug || '');
+        const variationId = Number(item.product_id);
+        // Incluye variation_id para que la ficha pre-seleccione la variación guardada.
+        const productUrl = `/producto?slug=${slug}&variation_id=${variationId}`;
 
         return `
           <article class="wishlist-item wishlist-page-item">
@@ -112,7 +115,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
               <strong>${name}</strong>
               <p>${price}${item.is_in_stock ? ' · En stock' : ' · Sin stock'}</p>
             </div>
-            <a class="button button-secondary item-view" href="/producto?slug=${slug}">Ver</a>
+            <a class="button button-secondary item-view" href="${productUrl}">Ver</a>
             <button class="remove-item remove" type="button" data-id="${Number(item.product_id)}" aria-label="Quitar ${name} de wishlist">
               <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                 <path d="M12 21.2 4.1 13.4A5.55 5.55 0 0 1 12 5.6a5.55 5.55 0 0 1 7.9 7.8L12 21.2Z" />

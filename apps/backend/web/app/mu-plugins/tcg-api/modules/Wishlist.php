@@ -77,7 +77,7 @@ final class TCG_Platform_API_Wishlist
         global $wpdb;
 
         $product_id = absint($request->get_param('product_id'));
-        $product = self::get_product($product_id);
+        $product    = self::get_product($product_id);
 
         if (! $product instanceof WC_Product) {
             return self::error('tcg_wishlist_product_not_found', 'Product not found.', 404);
@@ -102,7 +102,7 @@ final class TCG_Platform_API_Wishlist
         $wpdb->delete(
             self::table(),
             [
-                'user_id' => get_current_user_id(),
+                'user_id'    => get_current_user_id(),
                 'product_id' => absint($request['product_id']),
             ],
             ['%d', '%d']
@@ -136,21 +136,32 @@ final class TCG_Platform_API_Wishlist
 
     private static function item_payload(WC_Product $product, string $created_at = ''): array
     {
-        $image_id = $product->get_image_id();
-        $image = $image_id ? wp_get_attachment_image_url($image_id, 'woocommerce_thumbnail') : '';
+        // Para variaciones, los datos de navegación deben venir del padre.
+        $parent = $product instanceof WC_Product_Variation
+            ? wc_get_product($product->get_parent_id())
+            : null;
+
+        // Slug y permalink: siempre del padre (las variaciones no tienen URL propia).
+        $nav = ($parent instanceof WC_Product) ? $parent : $product;
+
+        // Imagen: primero la propia de la variación; si no tiene, la del padre.
+        $image_id = $product->get_image_id() ?: ($parent instanceof WC_Product ? $parent->get_image_id() : 0);
+        $image    = $image_id ? wp_get_attachment_image_url($image_id, 'woocommerce_thumbnail') : '';
+
         $price = function_exists('wc_price')
             ? html_entity_decode(wp_strip_all_tags(wc_price((float) $product->get_price())), ENT_QUOTES, get_bloginfo('charset'))
             : (string) $product->get_price();
 
         return [
-            'product_id' => $product->get_id(),
-            'slug' => $product->get_slug(),
-            'name' => $product->get_name(),
-            'price' => $price,
-            'image' => $image ?: '',
+            'product_id'  => $product->get_id(),
+            'slug'        => $nav->get_slug(),
+            // get_name() en una variación incluye los atributos: "Padre - Attr1, Attr2"
+            'name'        => $product->get_name(),
+            'price'       => $price,
+            'image'       => $image ?: '',
             'is_in_stock' => $product->is_in_stock(),
-            'permalink' => $product->get_permalink(),
-            'created_at' => $created_at,
+            'permalink'   => $nav->get_permalink(),
+            'created_at'  => $created_at,
         ];
     }
 
