@@ -49,7 +49,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
   <script>
     import { setupLocalPagination } from '../lib/pagination';
-    import { readWishlist, removeWishlistItem } from '../lib/wishlist';
+    import { readWishlist, refreshWishlist, removeWishlistItem } from '../lib/wishlist';
 
     const root = document.querySelector('#wishlist-items');
     const empty = document.querySelector('#wishlist-empty');
@@ -74,25 +74,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       "'": '&#039;',
     }[char]));
 
-    const render = async () => {
-      if (status) status.textContent = 'Cargando favoritos...';
-      if (skeleton) skeleton.hidden = false;
-      if (empty) empty.hidden = true;
-      if (root) root.hidden = true;
-      let items = [];
-      try {
-        items = await readWishlist();
-      } catch {
-        if (skeleton) skeleton.hidden = true;
-        try {
-          window.localStorage.removeItem('tcg.authenticated');
-          window.localStorage.removeItem('tcg.user.summary');
-          window.localStorage.removeItem('tcg.wishlist.items');
-        } catch {}
-        redirectToLogin();
-        return;
-      }
-
+    const renderItems = (items) => {
       if (skeleton) skeleton.hidden = true;
       if (root) root.hidden = false;
       if (empty) empty.hidden = items.length > 0;
@@ -127,13 +109,40 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
       root.querySelectorAll('.remove').forEach((button) => {
         button.addEventListener('click', async () => {
+          const productId = Number(button.dataset.id);
           button.disabled = true;
-          await removeWishlistItem(Number(button.dataset.id));
-          await render();
+          const nextItems = items.filter((item) => Number(item.product_id) !== productId);
+          renderItems(nextItems);
+          try {
+            await removeWishlistItem(productId);
+          } catch {
+            renderItems(items);
+          }
         });
       });
 
       pager.refresh();
+    };
+
+    const render = async () => {
+      if (status) status.textContent = 'Cargando favoritos...';
+      if (skeleton) skeleton.hidden = false;
+      if (empty) empty.hidden = true;
+      if (root) root.hidden = true;
+
+      try {
+        const cachedItems = await readWishlist();
+        renderItems(cachedItems);
+        refreshWishlist().then(renderItems).catch(() => {});
+      } catch {
+        if (skeleton) skeleton.hidden = true;
+        try {
+          window.localStorage.removeItem('tcg.authenticated');
+          window.localStorage.removeItem('tcg.user.summary');
+          window.localStorage.removeItem('tcg.wishlist.items');
+        } catch {}
+        redirectToLogin();
+      }
     };
 
     let renderQueued = false;

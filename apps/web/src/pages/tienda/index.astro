@@ -105,10 +105,11 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
   }
 
   <script>
-    import { shopApi, formatStorePrice, type StoreProduct } from '../../lib/shop';
+    import { shopApi, formatStorePrice, formatStorePriceHtml, type StoreProduct } from '../../lib/shop';
     import { getProductBadgesHtml } from '../../lib/product-badges';
     import { addCartItem } from '../../lib/cart';
-    import { addWishlistItem, readWishlist, removeWishlistItem } from '../../lib/wishlist';
+    import { cachedJson } from '../../lib/fetch-cache';
+    import { addWishlistItem, readWishlistIds, removeWishlistItem } from '../../lib/wishlist';
 
     const _loginUrl = `/login?next=${encodeURIComponent('/tienda')}`;
     const PER_PAGE = 12;
@@ -161,9 +162,10 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
     const _productTemplate = (product: StoreProduct): string => {
       const image = product.images?.[0];
-      const price = formatStorePrice(product.prices);
+      const priceHtml = formatStorePriceHtml(product.prices, product.on_sale);
+      const pricePlain = formatStorePrice(product.prices);
       const desc  = _escapeHtml(_htmlToText(product.short_description || product.description) || '');
-      const safeName  = _escapeHtml(product.name);
+      const safeName  = _escapeHtml(_htmlToText(product.name));
       const safeSlug  = encodeURIComponent(product.slug ?? '');
       const safeImage = _escapeHtml(image?.src ?? '');
       const badges     = getProductBadgesHtml(product);
@@ -174,7 +176,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         ? `<a class="button button-secondary" href="/producto?slug=${safeSlug}">Ver opciones</a>`
         : `<button class="button button-secondary add-to-cart" type="button"
             data-id="${product.id}" data-slug="${_escapeHtml(product.slug)}"
-            data-name="${safeName}" data-price="${_escapeHtml(price)}" data-image="${safeImage}"
+            data-name="${safeName}" data-price="${_escapeHtml(pricePlain)}" data-image="${safeImage}"
             ${isOutOfStock ? 'disabled' : ''}>
             ${isOutOfStock ? 'Agotado' : 'Añadir'}
           </button>`;
@@ -193,7 +195,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
               ${desc ? `<p>${desc}</p>` : '<p></p>'}
             </div>
             <div class="actions">
-              <strong>${_escapeHtml(price)}</strong>
+              <strong class="product-price">${priceHtml}</strong>
               ${addToCartBtn}
               <button class="wishlist-toggle add-to-wishlist" type="button"
                 aria-label="Guardar ${safeName} en wishlist" aria-pressed="false"
@@ -294,8 +296,8 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
     const _hydrateWishlistButtons = async (): Promise<void> => {
       try {
-        const items = await readWishlist() as Array<{ product_id: number | string }>;
-        wishlistIds = new Set<number>(items.map((i) => Number(i.product_id)));
+        const items = await readWishlistIds();
+        wishlistIds = new Set<number>(items.map(Number));
         grid?.querySelectorAll<HTMLButtonElement>('.add-to-wishlist').forEach((btn) => {
           _setWishlistBtn(btn, (wishlistIds as Set<number>).has(Number(btn.dataset['id'])));
         });
@@ -317,18 +319,23 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       if (!(wishlistIds instanceof Set)) await _hydrateWishlistButtons();
       const id = Number(btn.dataset['id']);
       const wasSaved = wishlistIds instanceof Set && wishlistIds.has(id);
+      if (!(wishlistIds instanceof Set)) wishlistIds = new Set<number>();
+
+      if (wasSaved) (wishlistIds as Set<number>).delete(id);
+      else (wishlistIds as Set<number>).add(id);
+      _setWishlistBtn(btn, !wasSaved);
+
       btn.disabled = true;
       try {
         if (wasSaved) {
           await removeWishlistItem(id);
-          (wishlistIds as Set<number>).delete(id);
         } else {
           await addWishlistItem(id);
-          if (!(wishlistIds instanceof Set)) wishlistIds = new Set<number>();
-          (wishlistIds as Set<number>).add(id);
         }
-        _setWishlistBtn(btn, !wasSaved);
       } catch {
+        if (wasSaved) (wishlistIds as Set<number>).add(id);
+        else (wishlistIds as Set<number>).delete(id);
+        _setWishlistBtn(btn, wasSaved);
         btn.classList.add('is-error');
         btn.setAttribute('aria-label', 'No se pudo actualizar la wishlist');
         window.setTimeout(() => btn.classList.remove('is-error'), 1400);
@@ -364,11 +371,10 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
       try {
         const url = _buildUrl(page);
-        const response = await fetch(url);
-        if (!response.ok) throw new Error(`WooCommerce respondió con ${response.status}`);
-        const products = await response.json() as StoreProduct[];
-        totalProducts = parseInt(response.headers.get('X-WP-Total') ?? '0', 10);
-        totalPages    = parseInt(response.headers.get('X-WP-TotalPages') ?? '1', 10);
+        const result = await cachedJson<StoreProduct[]>(url, {}, 60_000);
+        const products = result.data;
+        totalProducts = parseInt(result.headers['x-wp-total'] || '0', 10);
+        totalPages    = parseInt(result.headers['x-wp-totalpages'] || '1', 10);
 
         _setLoading(false);
 
@@ -411,9 +417,8 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     const _loadCategories = async (): Promise<void> => {
       try {
         const url = `${shopApi.categories}?per_page=50&orderby=name&order=asc`;
-        const response = await fetch(url);
-        if (!response.ok) return;
-        const cats = await response.json() as Array<{ slug: string; name: string; count: number }>;
+        const result = await cachedJson<Array<{ slug: string; name: string; count: number }>>(url, {}, 600_000);
+        const cats = result.data;
         if (!filterCategory) return;
         cats.forEach((cat) => {
           if (!cat.count) return;
@@ -751,14 +756,38 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
   }
 
   :global(.product-card .actions) {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 38px;
     align-items: center;
     gap: 10px;
   }
 
+  :global(.product-card .actions > .product-price) {
+    grid-column: 1 / -1;
+  }
+
+  :global(.product-card .actions > .button) {
+    min-width: 0;
+    width: 100%;
+    white-space: nowrap;
+  }
+
   :global(.product-card strong) {
     font-size: 1rem;
+  }
+
+  :global(.product-price del.price-regular) {
+    color: var(--color-muted);
+    font-weight: 400;
+    text-decoration: line-through;
+    font-size: 0.88em;
+    margin-right: 2px;
+  }
+
+  :global(.product-price ins.price-sale) {
+    color: #c0392b;
+    font-weight: 800;
+    text-decoration: none;
   }
 
   :global(.product-card .wishlist-toggle) {

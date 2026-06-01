@@ -8,6 +8,7 @@ export interface StoreProductImage {
 export interface StoreProductPrice {
   price: string;
   regular_price: string;
+  sale_price?: string;
   currency_code: string;
   currency_symbol: string;
   currency_minor_unit: number;
@@ -100,13 +101,39 @@ export const shopApiInternal = {
   products: `${siteConfig.internalApiUrl}/wc/store/v1/products`,
 };
 
-export function formatStorePrice(prices?: StoreProductPrice) {
+export function formatStorePrice(prices?: StoreProductPrice): string {
   if (!prices) return '-';
   const value = Number(prices.price) / 10 ** prices.currency_minor_unit;
   return new Intl.NumberFormat('es-ES', {
     style: 'currency',
     currency: prices.currency_code,
   }).format(value);
+}
+
+/**
+ * Returns HTML for the price, including a strikethrough regular price
+ * when the product is on sale (price < regular_price).
+ */
+export function formatStorePriceHtml(prices?: StoreProductPrice, onSale = false): string {
+  if (!prices) return '-';
+
+  const divisor       = 10 ** prices.currency_minor_unit;
+  const priceValue    = Number(prices.price) / divisor;
+  const regularValue  = Number(prices.regular_price) / divisor;
+
+  const fmt = new Intl.NumberFormat('es-ES', {
+    style: 'currency',
+    currency: prices.currency_code,
+  });
+
+  const currentFormatted  = fmt.format(priceValue);
+
+  if (onSale && regularValue > priceValue) {
+    const regularFormatted = fmt.format(regularValue);
+    return `<del class="price-regular">${regularFormatted}</del> <ins class="price-sale">${currentFormatted}</ins>`;
+  }
+
+  return currentFormatted;
 }
 
 export function buildProductsUrl(params: ShopQueryParams = {}): string {

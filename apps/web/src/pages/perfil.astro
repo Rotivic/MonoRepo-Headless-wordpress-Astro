@@ -232,6 +232,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       try {
         localSessionKeys.forEach((key) => window.localStorage.removeItem(key));
       } catch {}
+      try {
+        Object.keys(window.sessionStorage)
+          .filter((key) => key.startsWith('tcg.fetch:'))
+          .forEach((key) => window.sessionStorage.removeItem(key));
+      } catch {}
 
       window.dispatchEvent(new CustomEvent('tcg:cart-updated'));
       window.dispatchEvent(new CustomEvent('tcg:wishlist-updated'));

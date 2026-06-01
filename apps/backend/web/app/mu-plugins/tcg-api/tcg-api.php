@@ -44,6 +44,7 @@ final class TCG_Platform_API
         add_filter('wp_mail_from_name', [self::class, 'mail_from_name']);
         add_filter('rest_pre_serve_request', [self::class, 'send_cors_headers'], 10, 4);
         add_filter('rest_post_dispatch', [self::class, 'add_api_version_header'], 10, 3);
+        add_filter('rest_post_dispatch', [self::class, 'add_store_cache_headers'], 20, 3);
 
         if (defined('WP_CLI') && WP_CLI) {
             WP_CLI::add_command('tcg 2fa-reset', [self::class, 'cli_two_factor_reset']);
@@ -800,6 +801,32 @@ final class TCG_Platform_API
     {
         if (str_starts_with($request->get_route(), '/' . self::NAMESPACE)) {
             $result->header('X-TCG-API-Version', self::API_VERSION);
+        }
+
+        return $result;
+    }
+
+    /**
+     * Adds short-lived Cache-Control headers to public WooCommerce Store API GET responses.
+     * Authenticated (tcg/v1) routes are never cached.
+     * The 60s max-age + 300s stale-while-revalidate means browsers reuse cached responses
+     * instantly on repeat visits while revalidating in the background.
+     */
+    public static function add_store_cache_headers(WP_HTTP_Response $result, WP_REST_Server $server, WP_REST_Request $request): WP_HTTP_Response
+    {
+        if ($request->get_method() !== 'GET') {
+            return $result;
+        }
+
+        $route = $request->get_route();
+
+        if (str_starts_with($route, '/' . self::NAMESPACE)) {
+            return $result;
+        }
+
+        if (str_starts_with($route, '/wc/store/') || str_starts_with($route, '/wp/v2/')) {
+            $result->header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+            $result->header('Vary', 'Accept-Encoding');
         }
 
         return $result;

@@ -1,4 +1,5 @@
 import { csrfHeaders } from './security';
+import { dedupFetch } from './fetch-cache';
 import { tcgApi } from './tcg-api';
 
 const cartKey = 'tcg.cart.items';
@@ -43,7 +44,6 @@ function isAuthenticated() {
 
 function normalizeItem(item: CartItem): CartItem {
   const id = Number(item.product_id || item.id);
-
   return {
     ...item,
     id,
@@ -69,13 +69,17 @@ function writeLocalCart(items: CartItem[], notify = true) {
   }
 }
 
+// In-flight deduplication for the account cart fetch.
+// Multiple callers awaiting readAccountCart() at the same time share one request.
+let _accountCartPromise: Promise<CartItem[]> | null = null;
+
 async function cartJson<T>(url: string, options: RequestInit = {}): Promise<T> {
-  const response = await fetch(url, {
+  const response = await dedupFetch(url, {
     credentials: 'include',
     headers: csrfHeaders({ 'Content-Type': 'application/json', ...(options.headers || {}) }),
     ...options,
   });
-  const data = await response.json().catch(() => ({}));
+  const data = await response.clone().json().catch(() => ({}));
 
   if (!response.ok) {
     const friendlyMessages: Record<string, string> = {
@@ -102,20 +106,55 @@ export function writeCart(items: CartItem[]) {
   writeLocalCart(items.map(normalizeItem));
 }
 
+/**
+ * Fetches the account cart from the API.
+ * Concurrent calls share the same in-flight request.
+ */
 export async function readAccountCart(): Promise<CartItem[]> {
-  const payload = await cartJson<CartPayload>(tcgApi.cart);
-  const items = (payload.data || []).map(normalizeItem);
-  writeLocalCart(items, false);
-  return items;
+  if (_accountCartPromise) return _accountCartPromise;
+
+  _accountCartPromise = (async () => {
+    const payload = await cartJson<CartPayload>(tcgApi.cart);
+    const items = (payload.data || []).map(normalizeItem);
+    writeLocalCart(items, false);
+    return items;
+  })().finally(() => {
+    _accountCartPromise = null;
+  });
+
+  return _accountCartPromise;
 }
 
+/**
+ * Returns the active cart.
+ *
+ * Strategy: stale-while-revalidate.
+ * - Returns cached (localStorage) data immediately if available.
+ * - Revalidates in background; dispatches tcg:cart-updated when fresh data differs.
+ * - If the cache is empty (first visit), waits for the network response.
+ */
 export async function readActiveCart(): Promise<CartItem[]> {
   if (!isAuthenticated()) return readLocalCart();
 
+  const stale = readLocalCart();
+
+  if (stale.length > 0) {
+    // Return stale immediately, revalidate in background
+    readAccountCart()
+      .then((fresh) => {
+        if (JSON.stringify(fresh) !== JSON.stringify(stale)) {
+          dispatchCartUpdated(fresh);
+        }
+      })
+      .catch(() => {});
+    return stale;
+  }
+
+  // No cached data — wait for the network response
   try {
     return await readAccountCart();
   } catch {
-    return readLocalCart();
+    return stale;
   }
 }
 

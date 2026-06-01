@@ -11,6 +11,15 @@ const {
   title = siteConfig.name,
   description = siteConfig.description,
 } = Astro.props;
+
+// Extract the API origin for preconnect (strips /wp-json path)
+const apiOrigin = (() => {
+  try {
+    return new URL(siteConfig.apiUrl).origin;
+  } catch {
+    return '';
+  }
+})();
 ---
 
 <!doctype html>
@@ -22,6 +31,8 @@ const {
     <meta name="referrer" content="strict-origin-when-cross-origin" />
     <meta name="generator" content={Astro.generator} />
     <title>{title}</title>
+    {apiOrigin && <link rel="preconnect" href={apiOrigin} crossorigin="use-credentials" />}
+    {apiOrigin && <link rel="dns-prefetch" href={apiOrigin} />}
   </head>
   <body>
     <slot />

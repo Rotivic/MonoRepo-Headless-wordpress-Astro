@@ -97,6 +97,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   }
 
   <script define:vars={{ meUrl: tcgApi.me, salesUrl: tcgApi.adminSales }}>
+    import { cachedJson } from '../lib/fetch-cache';
+
     const page = document.querySelector('#backoffice-page');
     const loading = document.querySelector('#sales-loading');
     const metricOrders = document.querySelector('#metric-orders');
@@ -288,9 +290,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     };
 
     const loadSales = async () => {
-      const salesResponse = await fetch(buildSalesUrl(), { credentials: 'include' });
-      const salesPayload = await salesResponse.json();
-      if (!salesResponse.ok) throw new Error(salesPayload.message || 'No se pudieron cargar las ventas.');
+      const salesPayload = await cachedJson(buildSalesUrl().toString(), { credentials: 'include' }, 20_000);
       renderSales(salesPayload.data || {});
     };
 
@@ -331,10 +331,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
     exportCsv?.addEventListener('click', downloadCsv);
 
-    fetch(meUrl, { credentials: 'include' })
-      .then(async (response) => {
-        if (!response.ok) throw new Error('Debes iniciar sesion.');
-        const payload = await response.json();
+    cachedJson(meUrl, { credentials: 'include' }, 15_000)
+      .then(async ({ data: payload }) => {
         if (!payload.data?.can_access_backoffice) throw new Error('Sin permisos.');
         await loadSales();
         if (loading) loading.hidden = true;

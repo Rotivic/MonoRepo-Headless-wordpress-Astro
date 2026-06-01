@@ -167,6 +167,11 @@ const { active = 'home' } = Astro.props;
     try {
       sessionStorageKeys.forEach((key) => localStorage.removeItem(key));
     } catch {}
+    try {
+      Object.keys(sessionStorage)
+        .filter((key) => key.startsWith('tcg.fetch:'))
+        .forEach((key) => sessionStorage.removeItem(key));
+    } catch {}
 
     window.dispatchEvent(new CustomEvent('tcg:cart-updated'));
     window.dispatchEvent(new CustomEvent('tcg:wishlist-updated'));
@@ -248,6 +253,8 @@ const { active = 'home' } = Astro.props;
 
   // --- Cart ---
   const cartKey = 'tcg.cart.items';
+  const wishlistIdsKey = 'tcg.wishlist.ids';
+  const cacheTtl = 300000;
   const loginCartUrl = '/login?next=%2Fcarrito';
   let canvasCartItems = null;
   const readLocalCart = () => {
@@ -255,6 +262,20 @@ const { active = 'home' } = Astro.props;
   };
   const writeLocalCart = (items) => {
     try { localStorage.setItem(cartKey, JSON.stringify(items)); } catch {}
+  };
+  const readCachedWishlistIds = () => {
+    try {
+      const cached = JSON.parse(localStorage.getItem(wishlistIdsKey) || 'null');
+      if (!cached || Date.now() - Number(cached.time || 0) > cacheTtl) return null;
+      return new Set((cached.data || []).map((id) => Number(id)));
+    } catch {
+      return null;
+    }
+  };
+  const writeCachedWishlistIds = (ids) => {
+    try {
+      localStorage.setItem(wishlistIdsKey, JSON.stringify({ time: Date.now(), data: Array.from(ids || []) }));
+    } catch {}
   };
   const formatMoney = (value) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(value);
   const itemSubtotal = (item) => {
@@ -291,14 +312,27 @@ const { active = 'home' } = Astro.props;
   };
 
   let canvasWishlistIds = null;
-  const ensureCanvasWishlist = async () => {
+  const ensureCanvasWishlist = async (forceRefresh = false) => {
     if (canvasWishlistIds instanceof Set) return canvasWishlistIds;
+    if (!forceRefresh) {
+      const cached = readCachedWishlistIds();
+      if (cached instanceof Set) {
+        canvasWishlistIds = cached;
+        fetchWishlistIds(true).catch(() => {});
+        return canvasWishlistIds;
+      }
+    }
 
+    return fetchWishlistIds(forceRefresh);
+  };
+
+  const fetchWishlistIds = async () => {
     try {
-      const response = await fetch(wishlistUrl, { credentials: 'include' });
+      const response = await fetch(`${wishlistUrl}?ids_only=1`, { credentials: 'include' });
       if (!response.ok) throw new Error('Guest');
       const payload = await response.json();
-      canvasWishlistIds = new Set((payload.data || []).map((item) => Number(item.product_id)));
+      canvasWishlistIds = new Set((payload.data || []).map((id) => Number(id)));
+      writeCachedWishlistIds(canvasWishlistIds);
     } catch {
       canvasWishlistIds = null;
     }
@@ -342,6 +376,7 @@ const { active = 'home' } = Astro.props;
 
       if (wasSaved) {
         canvasWishlistIds.delete(productId);
+        writeCachedWishlistIds(canvasWishlistIds);
         button.setAttribute('aria-pressed', 'false');
         button.classList.remove('is-active');
         button.setAttribute('aria-label', 'Guardar en wishlist');
@@ -350,6 +385,7 @@ const { active = 'home' } = Astro.props;
         }));
       } else {
         canvasWishlistIds.add(productId);
+        writeCachedWishlistIds(canvasWishlistIds);
         button.setAttribute('aria-pressed', 'true');
         button.classList.add('is-active');
         button.setAttribute('aria-label', 'Guardado en wishlist');
@@ -377,10 +413,11 @@ const { active = 'home' } = Astro.props;
   const canvasWarning = document.querySelector('#canvas-warning');
   let canvasRenderId = 0;
 
-  const updateBadge = async () => {
+  // Synchronous badge update — reads from in-memory cache or localStorage immediately.
+  const updateBadge = (items) => {
     if (!badge) return;
-    const items = canvasCartItems || await readCart();
-    const total = items.reduce((s, i) => s + (i.quantity || 1), 0);
+    const data = items ?? canvasCartItems ?? readLocalCart();
+    const total = data.reduce((s, i) => s + (i.quantity || 1), 0);
     badge.textContent = String(total > 99 ? '99+' : total);
     badge.classList.toggle('visible', total > 0);
   };
@@ -388,24 +425,34 @@ const { active = 'home' } = Astro.props;
   const setCanvasLoading = (isLoading) => {
     if (canvasLoading) canvasLoading.hidden = !isLoading;
     if (canvasItems) canvasItems.hidden = isLoading;
-    if (canvasEmpty) canvasEmpty.style.display = isLoading ? 'none' : canvasEmpty.style.display;
-    if (canvasFooter) canvasFooter.style.display = isLoading ? 'none' : canvasFooter.style.display;
+    if (canvasEmpty) canvasEmpty.style.display = isLoading ? 'none' : 'none';
+    if (canvasFooter) canvasFooter.style.display = isLoading ? 'none' : 'none';
   };
 
-  const renderCanvas = async () => {
+  const renderCanvas = async (forceRefresh) => {
     const renderId = ++canvasRenderId;
-    const items = await readCart();
-    const hasItems = items.length > 0;
 
-    setCanvasLoading(true);
-    if (canvasItems) canvasItems.innerHTML = '';
-
-    const [wishlistIds] = await Promise.all([
+    // Use cached items for instant render; only show skeleton on first open.
+    const cached = !forceRefresh && canvasCartItems;
+    if (!cached) setCanvasLoading(true);
+    const [items, wishlistIds] = await Promise.all([
+      cached ? Promise.resolve(cached) : readCart(),
       ensureCanvasWishlist(),
-      new Promise((resolve) => window.setTimeout(resolve, 160)),
     ]);
 
     if (renderId !== canvasRenderId) return;
+
+    const hasItems = items.length > 0;
+    setCanvasLoading(false);
+
+    if (!cached) {
+      // background revalidation after first render
+    } else {
+      readCart().then((fresh) => {
+        if (renderId !== canvasRenderId) return;
+        if (JSON.stringify(fresh) !== JSON.stringify(cached)) renderCanvas(true);
+      }).catch(() => {});
+    }
 
     setCanvasLoading(false);
     if (canvasEmpty) canvasEmpty.style.display = hasItems ? 'none' : 'flex';
@@ -490,7 +537,7 @@ const { active = 'home' } = Astro.props;
         if (control) control.classList.add('is-error');
         window.setTimeout(() => control?.classList.remove('is-error'), 1200);
       } finally {
-        renderCanvas();
+        renderCanvas(false);
         updateBadge();
       }
     };
@@ -532,7 +579,7 @@ const { active = 'home' } = Astro.props;
         }
         writeLocalCart(canvasCartItems);
         window.dispatchEvent(new CustomEvent('tcg:cart-updated', { detail: { items: canvasCartItems } }));
-        renderCanvas();
+        renderCanvas(false);
         updateBadge();
       });
     });
@@ -543,7 +590,8 @@ const { active = 'home' } = Astro.props;
     canvas?.classList.add('open');
     backdrop?.classList.add('open');
     document.body.style.overflow = 'hidden';
-    renderCanvas();
+    if (!canvasCartItems) setCanvasLoading(true);
+    renderCanvas(false);
   };
 
   const closeCanvas = () => {
@@ -561,11 +609,12 @@ const { active = 'home' } = Astro.props;
     if (Array.isArray(event.detail?.items)) {
       canvasCartItems = event.detail.items;
       writeLocalCart(canvasCartItems);
+      updateBadge(canvasCartItems);
     } else {
       canvasCartItems = null;
+      updateBadge(null);
     }
-    updateBadge();
-    if (canvas?.classList.contains('open')) renderCanvas();
+    if (canvas?.classList.contains('open')) renderCanvas(false);
   });
   window.addEventListener('tcg:wishlist-updated', (event) => {
     const detail = event.detail || {};
@@ -575,14 +624,25 @@ const { active = 'home' } = Astro.props;
       if (!(canvasWishlistIds instanceof Set)) canvasWishlistIds = new Set();
       if (detail.action === 'added') canvasWishlistIds.add(productId);
       if (detail.action === 'removed') canvasWishlistIds.delete(productId);
+      writeCachedWishlistIds(canvasWishlistIds);
     } else {
       canvasWishlistIds = null;
     }
 
-    if (canvas?.classList.contains('open')) renderCanvas();
+    if (canvas?.classList.contains('open')) renderCanvas(false);
   });
 
-  updateBadge();
+  // Show badge immediately from localStorage (synchronous, no network)
+  updateBadge(null);
+
+  // Background cart refresh so badge and canvas stay fresh
+  if (localStorage.getItem(authKey) === '1') {
+    readCart().then((items) => {
+      canvasCartItems = items;
+      updateBadge(items);
+    }).catch(() => {});
+    ensureCanvasWishlist().catch(() => {});
+  }
 </script>
 
 <style>

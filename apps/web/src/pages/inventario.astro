@@ -73,6 +73,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   }
 
   <script>
+    import { cachedJson } from '../lib/fetch-cache';
     import { tcgApi } from '../lib/tcg-api';
 
     const meUrl = tcgApi.me;
@@ -183,10 +184,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     };
 
     const loadInventory = async (pageNumber = currentPage) => {
-      const authResponse = await fetch(meUrl, { credentials: 'include' });
-      if (!authResponse.ok) throw new Error('Debes iniciar sesion.');
-
-      const authPayload = await authResponse.json();
+      const { data: authPayload } = await cachedJson(meUrl, { credentials: 'include' }, 15_000);
       if (!authPayload.data?.can_access_backoffice) throw new Error('Sin permisos.');
 
       const url = new URL(inventoryUrl);
@@ -196,9 +194,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       if (stockSelect?.value) url.searchParams.set('stock', stockSelect.value);
       if (typeSelect?.value) url.searchParams.set('type', typeSelect.value);
 
-      const productsResponse = await fetch(url, { credentials: 'include' });
-      if (!productsResponse.ok) throw new Error(`WooCommerce respondio con ${productsResponse.status}`);
-      const inventoryPayload = await productsResponse.json();
+      const { data: inventoryPayload } = await cachedJson(url.toString(), { credentials: 'include' }, 20_000);
 
       renderAlerts(inventoryPayload.alerts || {});
       renderProducts(inventoryPayload.data || [], inventoryPayload.meta || {});
@@ -216,11 +212,12 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       if (page) page.hidden = false;
       if (table) table.hidden = true;
       if (pagination) pagination.hidden = true;
-      if (error instanceof Error && (error.message === 'Debes iniciar sesion.' || error.message === 'Sin permisos.')) {
+      const message = error instanceof Error ? error.message : '';
+      if (message === 'Sin permisos.' || message.includes('sesion') || message.includes('autentic')) {
         window.location.assign('/login');
         return;
       }
-      setStatus(error instanceof Error ? error.message : 'No se pudo cargar el inventario.', 'error');
+      setStatus(message || 'No se pudo cargar el inventario.', 'error');
     };
 
     filters?.addEventListener('submit', (event) => event.preventDefault());

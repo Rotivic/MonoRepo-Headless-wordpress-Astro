@@ -61,6 +61,18 @@ final class TCG_Platform_API_Wishlist
         global $wpdb;
 
         $user_id = get_current_user_id();
+
+        if (rest_sanitize_boolean($request->get_param('ids_only'))) {
+            $ids = $wpdb->get_col($wpdb->prepare(
+                'SELECT product_id FROM ' . self::table() . ' WHERE user_id = %d ORDER BY created_at DESC',
+                $user_id
+            ));
+
+            return new WP_REST_Response([
+                'data' => array_values(array_map('absint', $ids ?: [])),
+            ]);
+        }
+
         $rows = $wpdb->get_results($wpdb->prepare(
             'SELECT product_id, created_at FROM ' . self::table() . ' WHERE user_id = %d ORDER BY created_at DESC',
             $user_id
@@ -92,7 +104,9 @@ final class TCG_Platform_API_Wishlist
         ));
 
         return new WP_REST_Response([
-            'data' => self::item_payload($product),
+            'data' => [
+                'product_id' => $product->get_id(),
+            ],
         ], 201);
     }
 
