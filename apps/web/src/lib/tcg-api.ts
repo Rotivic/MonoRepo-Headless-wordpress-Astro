@@ -20,6 +20,7 @@ export const tcgApi = {
   wishlist: `${siteConfig.apiUrl}/tcg/v1/wishlist`,
   wishlistItem: (productId: number | string) => `${siteConfig.apiUrl}/tcg/v1/wishlist/${productId}`,
   cart: `${siteConfig.apiUrl}/tcg/v1/cart`,
+  cartSummary: `${siteConfig.apiUrl}/tcg/v1/cart/summary`,
   cartMerge: `${siteConfig.apiUrl}/tcg/v1/cart/merge`,
   cartItem: (productId: number | string) => `${siteConfig.apiUrl}/tcg/v1/cart/${productId}`,
   cartTotals: `${siteConfig.apiUrl}/tcg/v1/cart/totals`,

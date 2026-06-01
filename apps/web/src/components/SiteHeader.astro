@@ -137,8 +137,12 @@ const { active = 'home' } = Astro.props;
   const renderAvatar = (summary) => {
     if (!userAvatar || !summary) return;
 
+    userAvatar.textContent = '';
     if (summary.avatar_url) {
-      userAvatar.innerHTML = '<img src="' + summary.avatar_url + '" alt="Avatar">';
+      const img = document.createElement('img');
+      img.src = summary.avatar_url;
+      img.alt = 'Avatar';
+      userAvatar.appendChild(img);
       return;
     }
 

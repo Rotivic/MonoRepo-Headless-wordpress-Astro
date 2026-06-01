@@ -51,6 +51,15 @@ final class TCG_Platform_API_Coupons
         $coupon_code     = $coupon_param !== '' ? strtolower($coupon_param) : strtolower((string) get_user_meta($user_id, self::COUPON_META, true));
         $shipping_method = sanitize_key((string) ($request->get_param('shipping_method') ?: 'local_delivery'));
 
+        return new WP_REST_Response([
+            'data' => self::calculate_totals_for_user($user_id, $coupon_code, $shipping_method),
+        ]);
+    }
+
+    public static function calculate_totals_for_user(int $user_id, string $coupon_code = '', string $shipping_method = 'local_delivery'): array
+    {
+        $coupon_code = strtolower(sanitize_text_field($coupon_code));
+        $shipping_method = sanitize_key($shipping_method ?: 'local_delivery');
         $items    = self::cart_items($user_id);
         $subtotal = array_sum(array_map(static fn (array $item): float => $item['price_raw'] * $item['quantity'], $items));
 
@@ -90,27 +99,25 @@ final class TCG_Platform_API_Coupons
 
         $total_raw = max(0.0, $subtotal - $discount_raw) + $shipping_raw + $tax_raw;
 
-        return new WP_REST_Response([
-            'data' => [
-                'subtotal_raw'     => $subtotal,
-                'subtotal'         => self::money($subtotal),
-                'coupon_code'      => $applied_code,
-                'coupon_label'     => $coupon_label,
-                'coupon_error'     => $coupon_error,
-                'discount_raw'     => $discount_raw,
-                'discount'         => $discount_raw > 0.0 ? '-' . self::money($discount_raw) : '',
-                'shipping_method'  => $selected_method['id'] ?? $shipping_method,
-                'shipping_label'   => $shipping_label,
-                'shipping_raw'     => $shipping_raw,
-                'shipping'         => self::money($shipping_raw),
-                'shipping_methods' => $shipping_methods,
-                'tax_raw'          => $tax_raw,
-                'tax'              => $tax_raw > 0.0 ? self::money($tax_raw) : '',
-                'tax_label'        => $tax_label,
-                'total_raw'        => $total_raw,
-                'total'            => self::money($total_raw),
-            ],
-        ]);
+        return [
+            'subtotal_raw'     => $subtotal,
+            'subtotal'         => self::money($subtotal),
+            'coupon_code'      => $applied_code,
+            'coupon_label'     => $coupon_label,
+            'coupon_error'     => $coupon_error,
+            'discount_raw'     => $discount_raw,
+            'discount'         => $discount_raw > 0.0 ? '-' . self::money($discount_raw) : '',
+            'shipping_method'  => $selected_method['id'] ?? $shipping_method,
+            'shipping_label'   => $shipping_label,
+            'shipping_raw'     => $shipping_raw,
+            'shipping'         => self::money($shipping_raw),
+            'shipping_methods' => $shipping_methods,
+            'tax_raw'          => $tax_raw,
+            'tax'              => $tax_raw > 0.0 ? self::money($tax_raw) : '',
+            'tax_label'        => $tax_label,
+            'total_raw'        => $total_raw,
+            'total'            => self::money($total_raw),
+        ];
     }
 
     public static function apply_coupon(WP_REST_Request $request): WP_REST_Response|WP_Error

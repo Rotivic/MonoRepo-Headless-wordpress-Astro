@@ -45,6 +45,7 @@ final class TCG_Platform_API
         add_filter('rest_pre_serve_request', [self::class, 'send_cors_headers'], 10, 4);
         add_filter('rest_post_dispatch', [self::class, 'add_api_version_header'], 10, 3);
         add_filter('rest_post_dispatch', [self::class, 'add_store_cache_headers'], 20, 3);
+        add_action('send_headers', [self::class, 'send_security_headers']);
 
         if (defined('WP_CLI') && WP_CLI) {
             WP_CLI::add_command('tcg 2fa-reset', [self::class, 'cli_two_factor_reset']);
@@ -292,7 +293,6 @@ final class TCG_Platform_API
         self::send_session_cookie($token);
 
         return new WP_REST_Response([
-            'token' => $token,
             'two_factor' => false,
             'data' => self::user_payload($user),
         ], 201);
@@ -381,7 +381,6 @@ final class TCG_Platform_API
         self::send_session_cookie($token);
 
         return new WP_REST_Response([
-            'token' => $token,
             'two_factor' => false,
             'data' => self::user_payload($user),
         ]);
@@ -791,7 +790,6 @@ final class TCG_Platform_API
         self::send_session_cookie($token);
 
         return new WP_REST_Response([
-            'token' => $token,
             'two_factor' => false,
             'data' => self::user_payload($user),
         ]);
@@ -824,7 +822,11 @@ final class TCG_Platform_API
             return $result;
         }
 
-        if (str_starts_with($route, '/wc/store/') || str_starts_with($route, '/wp/v2/')) {
+        if (self::request_has_credentials($request)) {
+            return $result;
+        }
+
+        if (str_starts_with($route, '/wc/store/v1/products')) {
             $result->header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
             $result->header('Vary', 'Accept-Encoding');
         }
@@ -844,6 +846,18 @@ final class TCG_Platform_API
         }
 
         return $served;
+    }
+
+    public static function send_security_headers(): void
+    {
+        if (headers_sent()) {
+            return;
+        }
+
+        header('X-Content-Type-Options: nosniff');
+        header('Referrer-Policy: strict-origin-when-cross-origin');
+        header('Permissions-Policy: camera=(), microphone=(), geolocation=()');
+        header("Content-Security-Policy: frame-ancestors 'self'");
     }
 
     public static function configure_mailer(PHPMailer\PHPMailer\PHPMailer $phpmailer): void
@@ -1298,11 +1312,33 @@ final class TCG_Platform_API
 
         $allowed = [
             home_url(),
-            'http://localhost:4321',
-            'http://127.0.0.1:4321',
         ];
 
+        $frontend_url = (string) getenv('PUBLIC_FRONTEND_URL');
+        if ($frontend_url !== '') {
+            $allowed[] = $frontend_url;
+        }
+
+        $origin_host = parse_url($origin, PHP_URL_HOST);
+        $is_local_origin = in_array($origin_host, ['localhost', '127.0.0.1'], true);
+        $strict_cors = filter_var((string) getenv('TCG_STRICT_CORS'), FILTER_VALIDATE_BOOLEAN);
+
+        if (! $strict_cors && ($is_local_origin || wp_get_environment_type() !== 'production')) {
+            $allowed[] = 'http://localhost:4321';
+            $allowed[] = 'http://127.0.0.1:4321';
+        }
+
+        $configured = array_filter(array_map('trim', explode(',', (string) getenv('TCG_ALLOWED_ORIGINS'))));
+        $allowed = array_merge($allowed, $configured);
+
         return in_array(untrailingslashit($origin), array_map('untrailingslashit', $allowed), true);
+    }
+
+    private static function request_has_credentials(WP_REST_Request $request): bool
+    {
+        return self::bearer_token($request) !== ''
+            || ! empty($_COOKIE[self::SESSION_COOKIE])
+            || ! empty($_COOKIE[LOGGED_IN_COOKIE]);
     }
 
     private static function username_from_email(string $email): string

@@ -62,6 +62,12 @@ final class TCG_Platform_API_Cart
             'permission_callback' => ['TCG_Platform_API', 'require_auth'],
         ]);
 
+        register_rest_route($namespace, '/cart/summary', [
+            'methods' => WP_REST_Server::READABLE,
+            'callback' => [self::class, 'summary'],
+            'permission_callback' => ['TCG_Platform_API', 'require_auth'],
+        ]);
+
         register_rest_route($namespace, '/cart/(?P<product_id>\d+)', [
             [
                 'methods' => WP_REST_Server::EDITABLE,
@@ -87,6 +93,23 @@ final class TCG_Platform_API_Cart
     public static function index(): WP_REST_Response
     {
         return self::cart_response();
+    }
+
+    public static function summary(WP_REST_Request $request): WP_REST_Response|WP_Error
+    {
+        $response = self::cart_response();
+        $data = $response->get_data();
+
+        if (class_exists('TCG_Platform_API_Coupons') && method_exists('TCG_Platform_API_Coupons', 'calculate_totals_for_user')) {
+            $coupon_param = sanitize_text_field((string) $request->get_param('coupon_code'));
+            $coupon_code = $coupon_param !== ''
+                ? strtolower($coupon_param)
+                : TCG_Platform_API_Coupons::get_persisted_coupon(get_current_user_id());
+            $shipping_method = sanitize_key((string) ($request->get_param('shipping_method') ?: 'local_delivery'));
+            $data['totals'] = TCG_Platform_API_Coupons::calculate_totals_for_user(get_current_user_id(), $coupon_code, $shipping_method);
+        }
+
+        return new WP_REST_Response($data);
     }
 
     public static function store(WP_REST_Request $request): WP_REST_Response|WP_Error

@@ -87,7 +87,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   }
 
   <script>
-    import { clearCart, readActiveCart, readCartTotals, removeCartItem, updateCartItem } from '../lib/cart';
+    import { clearCart, readActiveCart, readCartSummary, readCartTotals, removeCartItem, updateCartItem } from '../lib/cart';
     import { csrfHeaders } from '../lib/security';
     import { tcgApi } from '../lib/tcg-api';
     import { addWishlistItem, readWishlist } from '../lib/wishlist';
@@ -450,11 +450,12 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       renderCart(cartItems);
     });
 
-    Promise.all([hydrateWishlistState(), readActiveCart()])
-      .then(([, items]) => {
-        cartItems = items;
+    Promise.all([hydrateWishlistState(), readCartSummary()])
+      .then(([, summary]) => {
+        cartItems = summary.data || [];
+        totalsData = summary.totals || null;
         renderCart(cartItems);
-        if (items.length > 0) loadTotals();
+        renderTotals(totalsData);
       })
       .catch(() => {
         cartItems = [];

@@ -143,7 +143,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   }
 
   <script>
-    import { readActiveCart, readCartTotals, writeCart } from '../lib/cart';
+    import { readActiveCart, readCartSummary, readCartTotals, writeCart } from '../lib/cart';
     import { csrfHeaders } from '../lib/security';
     import { tcgApi } from '../lib/tcg-api';
 
@@ -396,10 +396,16 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
     requireAuth().then(async (isAuthenticated) => {
       if (!isAuthenticated) return;
-      checkoutItems = await readActiveCart();
+      const summary = await readCartSummary();
+      checkoutItems = summary.data || [];
+      totalsData = summary.totals || null;
       render(checkoutItems);
       if (checkoutItems.length > 0) {
-        await loadTotals();
+        if (totalsData) {
+          renderShippingMethods(totalsData.shipping_methods || []);
+        } else {
+          await loadTotals();
+        }
       }
     });
   </script>

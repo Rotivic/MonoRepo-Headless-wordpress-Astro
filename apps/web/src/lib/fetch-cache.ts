@@ -68,6 +68,7 @@ export interface CachedJsonResult<T> {
 }
 
 const _jsonInflight = new Map<string, Promise<CachedJsonResult<unknown>>>();
+const _jsonMemory = new Map<string, JsonCacheEntry<unknown>>();
 const _storedHeaders = ['x-wp-total', 'x-wp-totalpages'];
 
 function storageKey(key: string): string {
@@ -105,8 +106,14 @@ export async function cachedJson<T>(
 ): Promise<CachedJsonResult<T>> {
   const method = (init.method || 'GET').toUpperCase();
   const key = `${method}:${url}`;
+  const shouldPersist = method === 'GET' && ttlMs > 0 && isPublicCacheUrl(url);
 
-  if (method === 'GET') {
+  if (method === 'GET' && ttlMs > 0) {
+    const memory = readMemory<T>(key);
+    if (memory) return memory;
+  }
+
+  if (shouldPersist) {
     const cached = readStored<T>(key);
     if (cached) return cached;
   }
@@ -120,7 +127,8 @@ export async function cachedJson<T>(
       if (!response.ok) {
         throw new Error(data?.message || `Request failed with ${response.status}`);
       }
-      if (method === 'GET' && ttlMs > 0) writeStored(key, data, response.headers, ttlMs);
+      if (method === 'GET' && ttlMs > 0) writeMemory(key, data, response.headers, ttlMs);
+      if (shouldPersist) writeStored(key, data, response.headers, ttlMs);
       return {
         data,
         headers: Object.fromEntries(_storedHeaders.map((name) => [name, response.headers.get(name) || ''])),
@@ -134,9 +142,39 @@ export async function cachedJson<T>(
 }
 
 export function invalidateCachedJson(urlPrefix = ''): void {
+  Array.from(_jsonMemory.keys())
+    .filter((key) => key.includes(urlPrefix))
+    .forEach((key) => _jsonMemory.delete(key));
+
   try {
     Object.keys(sessionStorage)
       .filter((key) => key.startsWith('tcg.fetch:') && key.includes(urlPrefix))
       .forEach((key) => sessionStorage.removeItem(key));
   } catch {}
+}
+
+function isPublicCacheUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url, window.location.origin);
+    return parsed.pathname.includes('/wc/store/') || parsed.pathname.includes('/wp/v2/');
+  } catch {
+    return false;
+  }
+}
+
+function readMemory<T>(key: string): CachedJsonResult<T> | null {
+  const entry = _jsonMemory.get(key) as JsonCacheEntry<T> | undefined;
+  if (!entry) return null;
+  if (Date.now() - entry.time > entry.ttlMs) {
+    _jsonMemory.delete(key);
+    return null;
+  }
+  return { data: entry.data, headers: entry.headers || {}, fromCache: true };
+}
+
+function writeMemory<T>(key: string, data: T, headers: Headers, ttlMs: number): void {
+  const pickedHeaders = Object.fromEntries(
+    _storedHeaders.map((name) => [name, headers.get(name) || ''])
+  );
+  _jsonMemory.set(key, { data, headers: pickedHeaders, time: Date.now(), ttlMs });
 }

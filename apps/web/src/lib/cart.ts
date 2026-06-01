@@ -34,6 +34,12 @@ interface CartPayload {
   };
 }
 
+export interface CartSummary {
+  data: CartItem[];
+  meta?: CartPayload['meta'];
+  totals?: CartTotals;
+}
+
 export interface CartTotals {
   subtotal_raw?: number;
   subtotal?: string;
@@ -139,6 +145,24 @@ export async function readCartTotals(shippingMethod = ''): Promise<CartTotals | 
   return data;
 }
 
+export async function readCartSummary(shippingMethod = ''): Promise<CartSummary> {
+  if (!isAuthenticated()) {
+    return { data: readLocalCart() };
+  }
+
+  const url = new URL(tcgApi.cartSummary);
+  if (shippingMethod) url.searchParams.set('shipping_method', shippingMethod);
+  const payload = await cartJson<CartSummary>(url.toString());
+  const items = (payload.data || []).map(normalizeItem);
+  writeLocalCart(items, false);
+  if (payload.totals) {
+    const totalsUrl = new URL(tcgApi.cartTotals);
+    if (shippingMethod) totalsUrl.searchParams.set('shipping_method', shippingMethod);
+    totalsCache.set(totalsUrl.toString(), { time: Date.now(), data: payload.totals });
+  }
+  return { ...payload, data: items };
+}
+
 export function readCart(): CartItem[] {
   return readLocalCart();
 }
@@ -155,9 +179,10 @@ export async function readAccountCart(): Promise<CartItem[]> {
   if (_accountCartPromise) return _accountCartPromise;
 
   _accountCartPromise = (async () => {
-    const payload = await cartJson<CartPayload>(tcgApi.cart);
+    const payload = await cartJson<CartSummary>(tcgApi.cartSummary);
     const items = (payload.data || []).map(normalizeItem);
     writeLocalCart(items, false);
+    if (payload.totals) totalsCache.set(tcgApi.cartTotals, { time: Date.now(), data: payload.totals });
     return items;
   })().finally(() => {
     _accountCartPromise = null;

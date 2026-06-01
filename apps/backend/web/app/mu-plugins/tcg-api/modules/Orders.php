@@ -285,7 +285,7 @@ final class TCG_Platform_API_Orders
 
     public static function inventory(WP_REST_Request $request): WP_REST_Response|WP_Error
     {
-        if (! self::can_access_sales()) {
+        if (! self::can_access_inventory()) {
             return self::error('tcg_inventory_forbidden', 'Backoffice permissions are required.', 403);
         }
 
@@ -654,6 +654,13 @@ final class TCG_Platform_API_Orders
         return current_user_can('manage_options')
             || current_user_can('manage_woocommerce')
             || current_user_can('edit_shop_orders');
+    }
+
+    private static function can_access_inventory(): bool
+    {
+        return current_user_can('manage_options')
+            || current_user_can('manage_woocommerce')
+            || current_user_can('edit_products');
     }
 
     private static function money(float $amount): string
