@@ -8,6 +8,7 @@ if (! defined('ABSPATH')) {
 
 final class TCG_Platform_API_Cart
 {
+    use TCG_API_ErrorTrait;
     public static function install(): void
     {
         global $wpdb;
@@ -365,11 +366,6 @@ final class TCG_Platform_API_Cart
         global $wpdb;
 
         return $wpdb->prefix . 'tcg_cart_items';
-    }
-
-    private static function error(string $code, string $message, int $status): WP_Error
-    {
-        return new WP_Error($code, $message, ['status' => $status]);
     }
 
     private static function money_label(float $amount): string

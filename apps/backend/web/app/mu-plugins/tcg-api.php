@@ -11,6 +11,7 @@ if (! defined('ABSPATH')) {
     exit;
 }
 
+require_once __DIR__ . '/tcg-api/modules/Traits/ApiError.php';
 require_once __DIR__ . '/tcg-api/modules/Wishlist.php';
 require_once __DIR__ . '/tcg-api/modules/Cart.php';
 require_once __DIR__ . '/tcg-api/modules/Coupons.php';

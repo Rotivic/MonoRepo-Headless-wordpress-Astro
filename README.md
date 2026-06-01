@@ -85,6 +85,9 @@ npm run start
 npm run status
 npm run logs
 npm run web:build
+npm run web:test
+npm run backend:test
+npm run backend:lint
 npm run backend:plugins
 npm run db:ui
 ```
@@ -512,7 +515,7 @@ Por defecto se mantiene una sesion activa por `device_name`. Cada nuevo login o 
 
 Esta API debe ser tambien la base para Astro cuando necesite trabajar con usuario autenticado. La web puede consumir contenido publico con endpoints nativos de WordPress (`/wp-json/wp/v2/...`) y usar `/wp-json/tcg/v1/...` para login, cuenta, wishlist, compras, ventas o cualquier dato privado compartido con la app.
 
-La API propia vive como mu-plugin de aplicacion y se puede ampliar por modulos de dominio dentro de `apps/backend/web/app/mu-plugins/tcg-api/modules`. Wishlist usa este patron con `TCG_Platform_API_Wishlist`: guarda relaciones `user_id` + `product_id` en la tabla `wp_tcg_wishlist_items`, mientras que nombre, precio, imagen, enlace y stock se leen desde WooCommerce al responder. Cart usa `TCG_Platform_API_Cart` con la tabla `wp_tcg_cart_items`, guarda `user_id` + `product_id` + `quantity`, valida producto/stock antes de persistir y expone `/cart/merge` para fusionar el carrito invitado al iniciar sesion o registrarse. Checkout usa `TCG_Platform_API_Checkout` para convertir el carrito autenticado en un pedido real de WooCommerce en entorno local de pruebas. El checkout revalida stock, aplica cupones y calcula envio e impuestos en WooCommerce antes de crear el pedido; nunca confia en totales enviados por el frontend. Coupons usa `TCG_Platform_API_Coupons` para validar y persistir cupones WooCommerce por usuario, calcular el desglose completo de totales (subtotal, descuento, envio, impuestos, total) usando la configuracion real de WooCommerce y proporcionar metodos de envio disponibles con fallback a entrega local / recogida local a 0 euros si no hay zonas configuradas. Orders usa `TCG_Platform_API_Orders` para exponer pedidos del usuario y resumen de ventas backoffice desde WooCommerce.
+La API propia vive como mu-plugin de aplicacion y se puede ampliar por modulos de dominio dentro de `apps/backend/web/app/mu-plugins/tcg-api/modules`. Todos los modulos comparten el trait `TCG_API_ErrorTrait` (en `modules/Traits/ApiError.php`) para el metodo de error estandarizado. Todas las respuestas del namespace `tcg/v1` incluyen la cabecera `X-TCG-API-Version` con el numero de version de la API. Wishlist usa este patron con `TCG_Platform_API_Wishlist`: guarda relaciones `user_id` + `product_id` en la tabla `wp_tcg_wishlist_items`, mientras que nombre, precio, imagen, enlace y stock se leen desde WooCommerce al responder. Cart usa `TCG_Platform_API_Cart` con la tabla `wp_tcg_cart_items`, guarda `user_id` + `product_id` + `quantity`, valida producto/stock antes de persistir y expone `/cart/merge` para fusionar el carrito invitado al iniciar sesion o registrarse. Checkout usa `TCG_Platform_API_Checkout` para convertir el carrito autenticado en un pedido real de WooCommerce en entorno local de pruebas. El checkout revalida stock, aplica cupones y calcula envio e impuestos en WooCommerce antes de crear el pedido; nunca confia en totales enviados por el frontend. Coupons usa `TCG_Platform_API_Coupons` para validar y persistir cupones WooCommerce por usuario, calcular el desglose completo de totales (subtotal, descuento, envio, impuestos, total) usando la configuracion real de WooCommerce y proporcionar metodos de envio disponibles con fallback a entrega local / recogida local a 0 euros si no hay zonas configuradas. Orders usa `TCG_Platform_API_Orders` para exponer pedidos del usuario y resumen de ventas backoffice desde WooCommerce.
 
 Buenas practicas aplicadas en la capa inicial:
 
@@ -630,6 +633,10 @@ npm run db:backup
 npm run db:restore -- backups/archivo.sql
 npm run doctor
 npm run web:build
+npm run web:test
+npm run backend:test
+npm run backend:lint
+npm run backend:lint:fix
 npm run mobile:analyze
 npm run mobile:test
 ```

@@ -33,6 +33,8 @@ final class TCG_Platform_API
     private const PASSWORD_RESET_EXPIRES_META = 'tcg_password_reset_expires';
     private const SHORT_TOKEN_TTL = 30 * MINUTE_IN_SECONDS;
 
+    private const API_VERSION = '12';
+
     public static function boot(): void
     {
         add_action('rest_api_init', [self::class, 'register_routes']);
@@ -41,6 +43,7 @@ final class TCG_Platform_API
         add_filter('wp_mail_from', [self::class, 'mail_from']);
         add_filter('wp_mail_from_name', [self::class, 'mail_from_name']);
         add_filter('rest_pre_serve_request', [self::class, 'send_cors_headers'], 10, 4);
+        add_filter('rest_post_dispatch', [self::class, 'add_api_version_header'], 10, 3);
 
         if (defined('WP_CLI') && WP_CLI) {
             WP_CLI::add_command('tcg 2fa-reset', [self::class, 'cli_two_factor_reset']);
@@ -336,10 +339,11 @@ final class TCG_Platform_API
         $has_error = in_array('error', array_column($checks, 'status'), true);
 
         return new WP_REST_Response([
-            'status' => $has_error ? 'degraded' : 'ok',
-            'namespace' => self::NAMESPACE,
-            'time' => gmdate(DATE_ATOM),
-            'checks' => $checks,
+            'status'      => $has_error ? 'degraded' : 'ok',
+            'api_version' => self::API_VERSION,
+            'namespace'   => self::NAMESPACE,
+            'time'        => gmdate(DATE_ATOM),
+            'checks'      => $checks,
         ]);
     }
 
@@ -790,6 +794,15 @@ final class TCG_Platform_API
             'two_factor' => false,
             'data' => self::user_payload($user),
         ]);
+    }
+
+    public static function add_api_version_header(WP_HTTP_Response $result, WP_REST_Server $server, WP_REST_Request $request): WP_HTTP_Response
+    {
+        if (str_starts_with($request->get_route(), '/' . self::NAMESPACE)) {
+            $result->header('X-TCG-API-Version', self::API_VERSION);
+        }
+
+        return $result;
     }
 
     public static function send_cors_headers(mixed $served, WP_HTTP_Response $result, WP_REST_Request $request, WP_REST_Server $server): mixed

@@ -8,6 +8,7 @@ if (! defined('ABSPATH')) {
 
 final class TCG_Platform_API_Orders
 {
+    use TCG_API_ErrorTrait;
     public static function register_routes(string $namespace): void
     {
         register_rest_route($namespace, '/orders', [
@@ -536,8 +537,4 @@ final class TCG_Platform_API_Orders
         return $wpdb->prefix . 'tcg_cart_items';
     }
 
-    private static function error(string $code, string $message, int $status): WP_Error
-    {
-        return new WP_Error($code, $message, ['status' => $status]);
-    }
 }

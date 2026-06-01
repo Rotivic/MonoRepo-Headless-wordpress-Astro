@@ -8,6 +8,7 @@ if (! defined('ABSPATH')) {
 
 final class TCG_Platform_API_Coupons
 {
+    use TCG_API_ErrorTrait;
     private const COUPON_META = 'tcg_applied_coupon';
 
     public static function register_routes(string $namespace): void
@@ -320,8 +321,4 @@ final class TCG_Platform_API_Coupons
         return number_format($amount, 2, ',', '.') . ' €';
     }
 
-    private static function error(string $code, string $message, int $status): WP_Error
-    {
-        return new WP_Error($code, $message, ['status' => $status]);
-    }
 }
