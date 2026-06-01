@@ -2,7 +2,6 @@
 import BackButton from '../components/BackButton.astro';
 import SiteHeader from '../components/SiteHeader.astro';
 import { siteConfig } from '../config/site';
-import { tcgApi } from '../lib/tcg-api';
 import BaseLayout from '../layouts/BaseLayout.astro';
 ---
 
@@ -14,7 +13,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         <BackButton fallback="/perfil" />
         <p class="eyebrow">Cuenta</p>
         <h1>Mis pedidos</h1>
-        <p class="lede">Pedidos reales creados en WooCommerce desde tu cuenta.</p>
+        <p class="lede">Consulta el estado, revisa el detalle y repite compras anteriores.</p>
       </div>
       <section class="orders-panel">
         <div class="orders-skeleton" id="orders-skeleton" aria-hidden="true">
@@ -27,15 +26,43 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           <p>Cuando completes una compra, aqui se listaran estados, importes y productos.</p>
           <a class="button button-primary" href="/tienda">Ir a tienda</a>
         </div>
+        <p class="status-message" id="orders-status" aria-live="polite"></p>
         <div class="orders-list" id="orders-list"></div>
       </section>
     </section>
+
+    <div class="order-modal-backdrop" id="order-modal-backdrop" hidden></div>
+    <section class="order-modal" id="order-modal" role="dialog" aria-modal="true" aria-labelledby="order-modal-title" hidden>
+      <div class="order-modal-head">
+        <div>
+          <p class="eyebrow">Detalle</p>
+          <h2 id="order-modal-title">Pedido</h2>
+        </div>
+        <button class="modal-close" id="order-modal-close" type="button" aria-label="Cerrar detalle">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="order-modal-body" id="order-modal-body"></div>
+    </section>
   </main>
 
-  <script define:vars={{ ordersUrl: tcgApi.orders }}>
+  <script>
+    import { csrfHeaders } from '../lib/security';
+    import { readActiveCart, writeCart } from '../lib/cart';
+    import { tcgApi } from '../lib/tcg-api';
+
+    const ordersUrl = tcgApi.orders;
     const skeleton = document.querySelector('#orders-skeleton');
     const empty = document.querySelector('#orders-empty');
     const list = document.querySelector('#orders-list');
+    const status = document.querySelector('#orders-status');
+    const modal = document.querySelector('#order-modal');
+    const modalBackdrop = document.querySelector('#order-modal-backdrop');
+    const modalTitle = document.querySelector('#order-modal-title');
+    const modalBody = document.querySelector('#order-modal-body');
+    const modalClose = document.querySelector('#order-modal-close');
 
     const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, (char) => ({
       '&': '&amp;',
@@ -45,23 +72,139 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       "'": '&#039;',
     }[char]));
 
+    const setStatus = (message, state = '') => {
+      if (!status) return;
+      status.dataset.state = state;
+      status.textContent = message;
+    };
+
+    const formatDate = (value) => value ? new Date(value).toLocaleString('es-ES') : '-';
+
+    const statusPill = (order) => `
+      <span class="order-status" data-tone="${escapeHtml(order.status_tone || 'neutral')}">
+        ${escapeHtml(order.status_label || order.status || '')}
+      </span>
+    `;
+
     const renderOrders = (orders) => {
-      if (!list || !empty) return;
+      if (!list || !empty || !skeleton) return;
       skeleton.hidden = true;
       empty.hidden = orders.length > 0;
+      setStatus(orders.length ? `${orders.length} pedido(s) encontrados.` : '');
 
       list.innerHTML = orders.map((order) => `
         <article class="order-card">
           <div>
             <strong>Pedido #${escapeHtml(order.number || order.id)}</strong>
-            <p>${order.created_at ? new Date(order.created_at).toLocaleString('es-ES') : ''}</p>
+            <p>${formatDate(order.created_at)}</p>
+            <small>${escapeHtml(order.status_help || '')}</small>
           </div>
           <span>${Number(order.item_count || 0)} producto(s)</span>
           <span class="order-total">${escapeHtml(order.total || '')}</span>
-          <span class="order-status">${escapeHtml(order.status_label || order.status || '')}</span>
+          ${statusPill(order)}
+          <button class="button button-secondary order-detail" type="button" data-id="${Number(order.id)}">Ver detalle</button>
         </article>
       `).join('');
+
+      list.querySelectorAll('.order-detail').forEach((button) => {
+        button.addEventListener('click', () => openOrder(Number(button.dataset.id)));
+      });
     };
+
+    const detailHtml = (order) => `
+      <div class="detail-grid">
+        <div><dt>Estado</dt><dd>${statusPill(order)}<small>${escapeHtml(order.status_help || '')}</small></dd></div>
+        <div><dt>Total</dt><dd>${escapeHtml(order.total || '')}</dd></div>
+        <div><dt>Fecha</dt><dd>${formatDate(order.created_at)}</dd></div>
+        <div><dt>Pago</dt><dd>${escapeHtml(order.payment_method_title || '')}</dd></div>
+        <div><dt>Entrega</dt><dd>${escapeHtml(order.delivery_method_label || '')}</dd></div>
+        <div><dt>Telefono</dt><dd>${escapeHtml(order.billing?.phone || '')}</dd></div>
+        <div><dt>Direccion</dt><dd>${escapeHtml(order.shipping?.address || order.billing?.address || '')}</dd></div>
+        <div><dt>Notas</dt><dd>${escapeHtml(order.customer_note || 'Sin notas')}</dd></div>
+      </div>
+
+      <ol class="order-timeline">
+        ${(order.timeline || []).map((step) => `
+          <li class="${step.active ? 'is-active' : ''}">
+            <span></span>
+            <div><strong>${escapeHtml(step.label)}</strong><small>${step.date ? formatDate(step.date) : 'Pendiente'}</small></div>
+          </li>
+        `).join('')}
+      </ol>
+
+      <div class="order-lines">
+        ${(order.items || []).map((item) => `
+          <article>
+            <strong>${escapeHtml(item.name)}</strong>
+            <span>${Number(item.quantity || 1)} x ${escapeHtml(item.total || '')}</span>
+          </article>
+        `).join('')}
+      </div>
+
+      <div class="order-totals">
+        <div><span>Subtotal</span><strong>${escapeHtml(order.subtotal || '')}</strong></div>
+        <div><span>Descuento</span><strong>${escapeHtml(order.discount_total || '')}</strong></div>
+        <div><span>Envio</span><strong>${escapeHtml(order.shipping_total || '')}</strong></div>
+        <div><span>Total</span><strong>${escapeHtml(order.total || '')}</strong></div>
+      </div>
+
+      <div class="order-actions">
+        <button class="button button-primary repeat-order" type="button" data-id="${Number(order.id)}" ${order.can_repeat ? '' : 'disabled'}>Repetir pedido</button>
+        <button class="button button-secondary receipt-placeholder" type="button">Recibo pendiente</button>
+        <a class="button button-secondary" href="mailto:soporte@example.test?subject=Pedido%20${encodeURIComponent(order.number || order.id)}">Soporte</a>
+        <button class="button button-secondary cancel-placeholder" type="button" ${order.cancellation_available ? '' : 'disabled'}>Solicitar cancelacion</button>
+      </div>
+      <p class="detail-note">${escapeHtml(order.receipt_note || '')}</p>
+      <p class="detail-note">${escapeHtml(order.support_note || '')}</p>
+    `;
+
+    const openOrder = async (orderId) => {
+      if (!modal || !modalBackdrop || !modalBody || !modalTitle) return;
+      modal.hidden = false;
+      modalBackdrop.hidden = false;
+      modalTitle.textContent = `Pedido #${orderId}`;
+      modalBody.innerHTML = '<p class="muted">Cargando detalle...</p>';
+
+      try {
+        const response = await fetch(tcgApi.order(orderId), { credentials: 'include' });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.message || 'No se pudo cargar el pedido.');
+        const order = payload.data;
+        modalTitle.textContent = `Pedido #${order.number || order.id}`;
+        modalBody.innerHTML = detailHtml(order);
+        modalBody.querySelector('.repeat-order')?.addEventListener('click', () => repeatOrder(order.id));
+      } catch (error) {
+        modalBody.innerHTML = `<p class="status-message" data-state="error">${escapeHtml(error instanceof Error ? error.message : 'No se pudo cargar el pedido.')}</p>`;
+      }
+    };
+
+    const closeModal = () => {
+      if (modal) modal.hidden = true;
+      if (modalBackdrop) modalBackdrop.hidden = true;
+    };
+
+    const repeatOrder = async (orderId) => {
+      setStatus('Repitiendo pedido...');
+      try {
+        const response = await fetch(tcgApi.orderRepeat(orderId), {
+          method: 'POST',
+          credentials: 'include',
+          headers: csrfHeaders({ 'Content-Type': 'application/json' }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok && response.status !== 207) throw new Error(payload.message || 'No se pudo repetir el pedido.');
+        const items = await readActiveCart();
+        writeCart(items);
+        window.dispatchEvent(new CustomEvent('tcg:cart-updated', { detail: { items } }));
+        setStatus(payload.errors?.length ? 'Pedido repetido parcialmente. Algunos productos ya no estaban disponibles.' : 'Pedido repetido en el carrito.', payload.errors?.length ? 'warning' : 'success');
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : 'No se pudo repetir el pedido.', 'error');
+      }
+    };
+
+    modalClose?.addEventListener('click', closeModal);
+    modalBackdrop?.addEventListener('click', closeModal);
+    document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeModal(); });
 
     fetch(ordersUrl, { credentials: 'include' })
       .then(async (response) => {
@@ -77,119 +220,61 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         if (!orders) return;
         renderOrders(orders);
       })
-      .catch(() => {
-        skeleton.hidden = true;
+      .catch((error) => {
+        if (skeleton) skeleton.hidden = true;
         if (empty) empty.hidden = false;
+        setStatus(error instanceof Error ? error.message : 'No se pudieron cargar los pedidos.', 'error');
       });
   </script>
 </BaseLayout>
 
 <style>
-  .orders-view {
-    min-height: calc(100vh - 65px);
-    padding: 56px 0;
-    background: var(--color-surface-soft);
-  }
+  .orders-view { min-height: calc(100vh - 65px); padding: 56px 0; background: var(--color-surface-soft); }
+  .orders-shell { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(520px, 1.2fr); gap: 40px; }
+  .eyebrow { margin: 0 0 12px; color: var(--color-primary); font-size: 0.82rem; font-weight: 800; text-transform: uppercase; }
+  h1 { margin: 0; font-size: clamp(2.6rem, 7vw, 5rem); line-height: 1; }
+  .lede, .empty p, .muted { color: var(--color-body); line-height: 1.6; }
+  .orders-panel { border: 1px solid var(--color-hairline); border-radius: var(--radius-item); background: var(--color-canvas); padding: 22px; }
+  .orders-list, .orders-skeleton { display: grid; gap: 12px; }
+  .orders-skeleton span { display: block; height: 80px; border-radius: var(--radius-item); background: linear-gradient(90deg, #eef1f2 25%, #f7f8f8 37%, #eef1f2 63%); background-size: 400% 100%; animation: orders-loading 1.2s ease-in-out infinite; }
+  @keyframes orders-loading { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
 
-  .orders-shell {
-    display: grid;
-    grid-template-columns: minmax(0, 0.85fr) minmax(360px, 1.15fr);
-    gap: 40px;
-  }
+  .status-message { margin: 0 0 14px; color: var(--color-body); }
+  .status-message[data-state="success"] { color: #166534; }
+  .status-message[data-state="warning"] { color: #9a3412; }
+  .status-message[data-state="error"] { color: var(--color-danger); }
 
-  .eyebrow {
-    margin: 0 0 12px;
-    color: var(--color-primary);
-    font-size: 0.82rem;
-    font-weight: 800;
-    text-transform: uppercase;
-  }
+  :global(.order-card) { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto auto; gap: 14px; align-items: center; border: 1px solid var(--color-hairline); border-radius: var(--radius-item); padding: 14px; }
+  :global(.order-card p), :global(.order-card small) { margin: 4px 0 0; color: var(--color-body); }
+  :global(.order-total), :global(.order-status) { border-radius: var(--radius-pill); background: var(--color-surface-strong); padding: 7px 10px; font-size: 0.84rem; font-weight: 800; white-space: nowrap; }
+  :global(.order-total) { color: var(--color-primary); }
+  :global(.order-status[data-tone="success"]) { background: #f0fdf4; color: #166534; }
+  :global(.order-status[data-tone="info"]) { background: #eff6ff; color: #1d4ed8; }
+  :global(.order-status[data-tone="warning"]) { background: #fff7ed; color: #9a3412; }
+  :global(.order-status[data-tone="danger"]) { background: #fde8e8; color: var(--color-danger); }
 
-  h1 {
-    margin: 0;
-    font-size: clamp(2.6rem, 7vw, 5rem);
-    line-height: 1;
-  }
+  .order-modal-backdrop { position: fixed; inset: 0; z-index: 50; background: rgba(10, 11, 13, 0.4); }
+  .order-modal { position: fixed; top: 50%; left: 50%; z-index: 60; width: min(760px, calc(100vw - 28px)); max-height: calc(100vh - 40px); overflow: auto; transform: translate(-50%, -50%); border: 1px solid var(--color-hairline); border-radius: var(--radius-item); background: var(--color-canvas); box-shadow: 0 20px 80px rgba(0, 0, 0, 0.24); }
+  .order-modal-head { display: flex; justify-content: space-between; gap: 16px; align-items: center; border-bottom: 1px solid var(--color-hairline); padding: 18px 20px; }
+  .order-modal-head h2 { margin: 0; }
+  .modal-close { display: inline-grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 50%; background: var(--color-surface-strong); cursor: pointer; }
+  .order-modal-body { display: grid; gap: 18px; padding: 20px; }
+  :global(.detail-grid) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  :global(.detail-grid div) { border: 1px solid var(--color-hairline); border-radius: var(--radius-item); padding: 12px; }
+  :global(.detail-grid dt) { color: var(--color-body); font-size: 0.78rem; font-weight: 800; text-transform: uppercase; }
+  :global(.detail-grid dd) { display: grid; gap: 5px; margin: 4px 0 0; }
+  :global(.order-timeline) { display: grid; gap: 10px; list-style: none; margin: 0; padding: 0; }
+  :global(.order-timeline li) { display: grid; grid-template-columns: 14px 1fr; gap: 10px; align-items: start; color: var(--color-body); }
+  :global(.order-timeline span) { width: 12px; height: 12px; margin-top: 4px; border-radius: 50%; background: var(--color-surface-strong); }
+  :global(.order-timeline .is-active span) { background: var(--color-primary); }
+  :global(.order-lines) { display: grid; gap: 8px; }
+  :global(.order-lines article), :global(.order-totals div) { display: flex; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--color-hairline); padding: 9px 0; }
+  :global(.order-totals) { display: grid; gap: 2px; }
+  :global(.order-actions) { display: flex; flex-wrap: wrap; gap: 10px; }
+  :global(.detail-note) { margin: 0; color: var(--color-body); font-size: 0.88rem; line-height: 1.5; }
+  [hidden] { display: none; }
 
-  .lede,
-  .empty p {
-    color: var(--color-body);
-    line-height: 1.6;
-  }
-
-  .orders-panel {
-    border: 1px solid var(--color-hairline);
-    border-radius: var(--radius-item);
-    background: var(--color-canvas);
-    padding: 22px;
-  }
-
-  .orders-list {
-    display: grid;
-    gap: 12px;
-  }
-
-  .orders-skeleton {
-    display: grid;
-    gap: 12px;
-  }
-
-  .orders-skeleton span {
-    display: block;
-    height: 68px;
-    border-radius: var(--radius-item);
-    background: linear-gradient(90deg, #eef1f2 25%, #f7f8f8 37%, #eef1f2 63%);
-    background-size: 400% 100%;
-    animation: orders-loading 1.2s ease-in-out infinite;
-  }
-
-  @keyframes orders-loading {
-    0% {
-      background-position: 100% 50%;
-    }
-
-    100% {
-      background-position: 0 50%;
-    }
-  }
-
-  :global(.order-card) {
-    display: grid;
-    grid-template-columns: 1fr auto auto auto;
-    gap: 16px;
-    align-items: center;
-    border: 1px solid var(--color-hairline);
-    border-radius: var(--radius-item);
-    padding: 14px;
-  }
-
-  :global(.order-card p) {
-    margin: 4px 0 0;
-    color: var(--color-body);
-  }
-
-  :global(.order-total),
-  :global(.order-status) {
-    border-radius: var(--radius-pill);
-    background: var(--color-surface-strong);
-    padding: 7px 10px;
-    font-size: 0.84rem;
-    font-weight: 800;
-    white-space: nowrap;
-  }
-
-  :global(.order-total) {
-    color: var(--color-primary);
-  }
-
-  [hidden] {
-    display: none;
-  }
-
-  @media (max-width: 860px) {
-    .orders-shell,
-    :global(.order-card) {
-      grid-template-columns: 1fr;
-    }
+  @media (max-width: 900px) {
+    .orders-shell, :global(.order-card), :global(.detail-grid) { grid-template-columns: 1fr; }
   }
 </style>
