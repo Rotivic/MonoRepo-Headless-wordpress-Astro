@@ -219,6 +219,10 @@ final class TCG_Platform_API
             TCG_Platform_API_Cart::register_routes(self::NAMESPACE);
         }
 
+        if (class_exists('TCG_Platform_API_Coupons')) {
+            TCG_Platform_API_Coupons::register_routes(self::NAMESPACE);
+        }
+
         if (class_exists('TCG_Platform_API_Checkout')) {
             TCG_Platform_API_Checkout::register_routes(self::NAMESPACE);
         }

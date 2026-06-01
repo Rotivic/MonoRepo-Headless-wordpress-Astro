@@ -3,7 +3,6 @@ import ModuleDisabled from '../components/ModuleDisabled.astro';
 import SiteHeader from '../components/SiteHeader.astro';
 import { siteConfig } from '../config/site';
 import BaseLayout from '../layouts/BaseLayout.astro';
-import { tcgApi } from '../lib/tcg-api';
 ---
 
 <BaseLayout title={`Checkout | ${siteConfig.name}`}>
@@ -76,16 +75,16 @@ import { tcgApi } from '../lib/tcg-api';
 
             <section class="block">
               <h2>Entrega</h2>
-              <div class="delivery-options" role="radiogroup" aria-label="Metodo de entrega">
+              <div class="delivery-options" id="delivery-options" role="radiogroup" aria-label="Metodo de entrega">
                 <label>
-                  <input type="radio" name="delivery_method" value="local_delivery" checked />
+                  <input type="radio" name="shipping_method" value="local_delivery" checked />
                   <span>
                     <strong>Entrega local</strong>
                     <small>Sin coste en este entorno de pruebas.</small>
                   </span>
                 </label>
                 <label>
-                  <input type="radio" name="delivery_method" value="local_pickup" />
+                  <input type="radio" name="shipping_method" value="local_pickup" />
                   <span>
                     <strong>Recogida local</strong>
                     <small>El pedido queda preparado para recogida.</small>
@@ -101,16 +100,37 @@ import { tcgApi } from '../lib/tcg-api';
             <section class="summary block">
               <h2>Resumen</h2>
               <div id="checkout-items"></div>
-              <p id="checkout-empty" class="muted">No hay productos en el carrito.</p>
+              <p id="checkout-empty" class="muted" hidden>No hay productos en el carrito.</p>
+
               <div class="checkout-totals" id="checkout-totals" hidden>
-                <div><span>Subtotal</span><strong id="checkout-subtotal">0,00 €</strong></div>
-                <div><span>Entrega local</span><strong>0,00 €</strong></div>
-                <p>Impuestos, cupones y envio real se conectaran cuando WooCommerce tenga esa configuracion activa.</p>
+                <div class="totals-row">
+                  <span>Subtotal</span>
+                  <strong id="checkout-subtotal">0,00 €</strong>
+                </div>
+                <div class="totals-row" id="co-discount-row" hidden>
+                  <span id="co-discount-label">Descuento</span>
+                  <strong id="checkout-discount" class="discount-value"></strong>
+                </div>
+                <div class="totals-row">
+                  <span id="co-shipping-label">Envio</span>
+                  <strong id="checkout-shipping">0,00 €</strong>
+                </div>
+                <div class="totals-row" id="co-tax-row" hidden>
+                  <span id="co-tax-label">Impuestos</span>
+                  <strong id="checkout-tax"></strong>
+                </div>
+                <div class="totals-row totals-total">
+                  <span>Total</span>
+                  <strong id="checkout-total">0,00 €</strong>
+                </div>
+                <div id="coupon-badge" class="coupon-badge" hidden>
+                  <span id="coupon-badge-label"></span>
+                </div>
               </div>
             </section>
 
             <p class="status-message" id="checkout-status" aria-live="polite"></p>
-            <button class="button button-primary" id="checkout-submit" type="submit">Crear pedido</button>
+            <button class="button button-primary" id="checkout-submit" type="submit" disabled>Crear pedido</button>
           </form>
         </section>
       </main>
@@ -127,19 +147,36 @@ import { tcgApi } from '../lib/tcg-api';
     import { csrfHeaders } from '../lib/security';
     import { tcgApi } from '../lib/tcg-api';
 
-    const meUrl = tcgApi.me;
+    const meUrl    = tcgApi.me;
     const orderKey = 'tcg.last-checkout-order';
-    const itemsRoot = document.querySelector('#checkout-items');
-    const emptyRoot = document.querySelector('#checkout-empty');
-    const form = document.querySelector('#checkout-form');
-    const status = document.querySelector('#checkout-status');
-    const submit = document.querySelector('#checkout-submit');
-    const totalsRoot = document.querySelector('#checkout-totals');
-    const subtotalRoot = document.querySelector('#checkout-subtotal');
+
+    const itemsRoot      = document.querySelector('#checkout-items');
+    const emptyRoot      = document.querySelector('#checkout-empty');
+    const form           = document.querySelector('#checkout-form');
+    const statusEl       = document.querySelector('#checkout-status');
+    const submit         = document.querySelector('#checkout-submit');
+    const totalsRoot     = document.querySelector('#checkout-totals');
+    const deliveryRoot   = document.querySelector('#delivery-options');
+
+    const subtotalEl     = document.querySelector('#checkout-subtotal');
+    const discountRow    = document.querySelector('#co-discount-row');
+    const discountLabel  = document.querySelector('#co-discount-label');
+    const discountEl     = document.querySelector('#checkout-discount');
+    const shippingLabel  = document.querySelector('#co-shipping-label');
+    const shippingEl     = document.querySelector('#checkout-shipping');
+    const taxRow         = document.querySelector('#co-tax-row');
+    const taxLabel       = document.querySelector('#co-tax-label');
+    const taxEl          = document.querySelector('#checkout-tax');
+    const totalEl        = document.querySelector('#checkout-total');
+    const couponBadge    = document.querySelector('#coupon-badge');
+    const couponBadgeLbl = document.querySelector('#coupon-badge-label');
 
     let checkoutItems = [];
+    let totalsData    = null;
+    let appliedCoupon = '';
 
     const formatMoney = (value) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(value);
+
     const itemSubtotal = (item) => {
       const raw = Number(item.line_subtotal_raw);
       if (Number.isFinite(raw)) return raw;
@@ -154,10 +191,7 @@ import { tcgApi } from '../lib/tcg-api';
     const requireAuth = async () => {
       try {
         const response = await fetch(meUrl, { credentials: 'include' });
-        if (!response.ok) {
-          throw new Error('Guest');
-        }
-
+        if (!response.ok) throw new Error('Guest');
         const payload = await response.json().catch(() => ({}));
         prefillCheckout(payload.data || {});
         return true;
@@ -174,7 +208,7 @@ import { tcgApi } from '../lib/tcg-api';
     const setValue = (name, value) => {
       const field = form?.querySelector(`[name="${name}"]`);
       if (!field || value === undefined || value === null || value === '') return;
-      field.value = value;
+      (field as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement).value = value;
     };
 
     const prefillCheckout = (user) => {
@@ -190,16 +224,105 @@ import { tcgApi } from '../lib/tcg-api';
       setValue('country', user.checkout?.country || 'ES');
 
       const delivery = user.checkout?.delivery_method || 'local_delivery';
-      const deliveryInput = form?.querySelector(`[name="delivery_method"][value="${delivery}"]`);
-      if (deliveryInput) deliveryInput.checked = true;
+      const deliveryInput = form?.querySelector(`[name="shipping_method"][value="${delivery}"]`);
+      if (deliveryInput) (deliveryInput as HTMLInputElement).checked = true;
+    };
+
+    const renderTotals = (data) => {
+      if (!totalsRoot) return;
+
+      if (!data) {
+        const sub = checkoutItems.reduce((sum, item) => sum + itemSubtotal(item), 0);
+        if (subtotalEl) subtotalEl.textContent = formatMoney(sub);
+        if (totalEl) totalEl.textContent = formatMoney(sub);
+        if (discountRow) (discountRow as HTMLElement).hidden = true;
+        if (taxRow) (taxRow as HTMLElement).hidden = true;
+        if (shippingEl) shippingEl.textContent = '0,00 €';
+        return;
+      }
+
+      if (subtotalEl) subtotalEl.textContent = data.subtotal || formatMoney(data.subtotal_raw || 0);
+      if (shippingLabel) shippingLabel.textContent = data.shipping_label || 'Envio';
+      if (shippingEl) shippingEl.textContent = data.shipping || '0,00 €';
+      if (totalEl) totalEl.textContent = data.total || formatMoney(data.total_raw || 0);
+
+      if (discountRow && discountEl) {
+        const hasDiscount = data.discount_raw > 0;
+        (discountRow as HTMLElement).hidden = !hasDiscount;
+        if (hasDiscount) {
+          if (discountLabel) discountLabel.textContent = data.coupon_label || 'Descuento';
+          discountEl.textContent = data.discount || '';
+        }
+      }
+
+      if (taxRow && taxEl) {
+        const hasTax = data.tax_raw > 0;
+        (taxRow as HTMLElement).hidden = !hasTax;
+        if (hasTax) {
+          if (taxLabel) taxLabel.textContent = data.tax_label || 'Impuestos';
+          taxEl.textContent = data.tax || '';
+        }
+      }
+
+      if (couponBadge && couponBadgeLbl) {
+        if (data.coupon_code) {
+          appliedCoupon = data.coupon_code;
+          (couponBadge as HTMLElement).hidden = false;
+          couponBadgeLbl.textContent = data.coupon_label || ('Cupon ' + data.coupon_code.toUpperCase());
+        } else {
+          appliedCoupon = '';
+          (couponBadge as HTMLElement).hidden = true;
+        }
+      }
+    };
+
+    const loadTotals = async (shippingMethod = '') => {
+      try {
+        const method = shippingMethod || (form?.querySelector('[name="shipping_method"]:checked') as HTMLInputElement)?.value || 'local_delivery';
+        const url    = new URL(tcgApi.cartTotals);
+        url.searchParams.set('shipping_method', method);
+        const resp = await fetch(url.toString(), { credentials: 'include' });
+        if (!resp.ok) return;
+        const payload = await resp.json().catch(() => ({}));
+        totalsData = payload.data || null;
+        renderTotals(totalsData);
+        renderShippingMethods(totalsData?.shipping_methods || []);
+      } catch {
+        renderTotals(null);
+      }
+    };
+
+    const renderShippingMethods = (methods) => {
+      if (!deliveryRoot || !methods || methods.length === 0) return;
+      const current = (form?.querySelector('[name="shipping_method"]:checked') as HTMLInputElement)?.value || 'local_delivery';
+
+      deliveryRoot.innerHTML = methods.map((m) => {
+        const id    = String(m.id || '');
+        const label = String(m.label || id);
+        const cost  = m.cost_raw === 0 ? 'Gratis' : (m.cost || formatMoney(m.cost_raw || 0));
+        return `
+          <label>
+            <input type="radio" name="shipping_method" value="${id}" ${id === current ? 'checked' : ''} />
+            <span>
+              <strong>${label}</strong>
+              <small>${cost}</small>
+            </span>
+          </label>
+        `;
+      }).join('');
+
+      deliveryRoot.querySelectorAll('[name="shipping_method"]').forEach((radio) => {
+        radio.addEventListener('change', () => {
+          loadTotals((radio as HTMLInputElement).value);
+        });
+      });
     };
 
     const render = (items = checkoutItems) => {
       const hasItems = items.length > 0;
-      if (emptyRoot) emptyRoot.hidden = hasItems;
-      if (submit) submit.disabled = !hasItems;
-      if (totalsRoot) totalsRoot.hidden = !hasItems;
-      if (subtotalRoot) subtotalRoot.textContent = formatMoney(items.reduce((sum, item) => sum + itemSubtotal(item), 0));
+      if (emptyRoot) (emptyRoot as HTMLElement).hidden = hasItems;
+      if (submit) (submit as HTMLButtonElement).disabled = !hasItems;
+      if (totalsRoot) (totalsRoot as HTMLElement).hidden = !hasItems;
       if (!itemsRoot) return;
 
       itemsRoot.innerHTML = items.map((item) => `
@@ -208,30 +331,37 @@ import { tcgApi } from '../lib/tcg-api';
           <span>${item.line_subtotal || `${item.price} x ${item.quantity}`}</span>
         </article>
       `).join('');
+
+      renderTotals(totalsData);
     };
 
     const createOrder = async () => {
+      const formData = Object.fromEntries(new FormData(form as HTMLFormElement));
+      if (appliedCoupon) {
+        formData['coupon_code'] = appliedCoupon;
+      }
+
       const response = await fetch(tcgApi.checkout, {
         method: 'POST',
         credentials: 'include',
         headers: csrfHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify(Object.fromEntries(new FormData(form))),
+        body: JSON.stringify(formData),
       });
       const payload = await response.json().catch(() => ({}));
 
       if (!response.ok) {
         const friendlyMessages = {
-          tcg_checkout_empty_cart: 'El carrito esta vacio. Anade algun producto antes de continuar.',
-          tcg_checkout_product_not_found: 'Uno de los productos ya no esta disponible. Revisa el carrito.',
+          tcg_checkout_empty_cart:          'El carrito esta vacio. Anade algun producto antes de continuar.',
+          tcg_checkout_product_not_found:   'Uno de los productos ya no esta disponible. Revisa el carrito.',
           tcg_checkout_product_unavailable: 'Uno de los productos ya no se puede comprar. Revisa el carrito.',
-          tcg_checkout_product_out_of_stock: 'Uno de los productos se ha quedado sin stock. Revisa el carrito.',
-          tcg_checkout_not_enough_stock: 'No queda stock suficiente para una de las cantidades del carrito.',
+          tcg_checkout_product_out_of_stock:'Uno de los productos se ha quedado sin stock. Revisa el carrito.',
+          tcg_checkout_not_enough_stock:    'No queda stock suficiente para una de las cantidades del carrito.',
           tcg_checkout_woocommerce_missing: 'WooCommerce no esta disponible ahora mismo.',
-          tcg_checkout_order_failed: 'WooCommerce no pudo crear el pedido.',
+          tcg_checkout_order_failed:        'WooCommerce no pudo crear el pedido.',
         };
         const message = friendlyMessages[payload.code] || payload.message || 'No se pudo crear el pedido.';
-        const error = new Error(message);
-        error.code = payload.code || '';
+        const error   = new Error(message);
+        (error as any).code = payload.code || '';
         throw error;
       }
 
@@ -245,14 +375,14 @@ import { tcgApi } from '../lib/tcg-api';
 
       const items = checkoutItems;
       if (!items.length) {
-        if (status) status.textContent = 'Anade productos antes de continuar.';
+        if (statusEl) statusEl.textContent = 'Anade productos antes de continuar.';
         return;
       }
 
-      if (submit) submit.disabled = true;
-      if (status) {
-        status.dataset.state = '';
-        status.textContent = 'Creando pedido en WooCommerce...';
+      if (submit) (submit as HTMLButtonElement).disabled = true;
+      if (statusEl) {
+        (statusEl as HTMLElement).dataset.state = '';
+        statusEl.textContent = 'Creando pedido en WooCommerce...';
       }
 
       try {
@@ -261,11 +391,11 @@ import { tcgApi } from '../lib/tcg-api';
         writeCart([]);
         window.location.assign(`/compra-realizada?order=${encodeURIComponent(order.number || order.id)}`);
       } catch (error) {
-        if (status) {
-          status.dataset.state = 'error';
-          status.textContent = error instanceof Error ? error.message : 'No se pudo crear el pedido.';
+        if (statusEl) {
+          (statusEl as HTMLElement).dataset.state = 'error';
+          statusEl.textContent = error instanceof Error ? error.message : 'No se pudo crear el pedido.';
         }
-        if (submit) submit.disabled = false;
+        if (submit) (submit as HTMLButtonElement).disabled = false;
       }
     });
 
@@ -273,6 +403,9 @@ import { tcgApi } from '../lib/tcg-api';
       if (!isAuthenticated) return;
       checkoutItems = await readActiveCart();
       render(checkoutItems);
+      if (checkoutItems.length > 0) {
+        await loadTotals();
+      }
     });
   </script>
 </BaseLayout>
@@ -361,7 +494,7 @@ import { tcgApi } from '../lib/tcg-api';
     gap: 10px;
   }
 
-  .delivery-options label {
+  :global(.delivery-options label) {
     display: grid;
     grid-template-columns: auto 1fr;
     gap: 12px;
@@ -372,17 +505,17 @@ import { tcgApi } from '../lib/tcg-api';
     cursor: pointer;
   }
 
-  .delivery-options input {
+  :global(.delivery-options input) {
     margin-top: 3px;
     accent-color: var(--color-primary);
   }
 
-  .delivery-options strong,
-  .delivery-options small {
+  :global(.delivery-options strong),
+  :global(.delivery-options small) {
     display: block;
   }
 
-  .delivery-options small {
+  :global(.delivery-options small) {
     margin-top: 3px;
     color: var(--color-body);
   }
@@ -393,25 +526,59 @@ import { tcgApi } from '../lib/tcg-api';
     padding-top: 12px;
   }
 
-  .checkout-totals[hidden] {
-    display: none;
-  }
+  .checkout-totals[hidden] { display: none; }
 
-  .checkout-totals div {
+  .totals-row {
     display: flex;
     justify-content: space-between;
     gap: 16px;
+    font-size: 0.92rem;
   }
 
-  .checkout-totals strong {
-    color: var(--color-primary);
+  .totals-row[hidden] { display: none; }
+
+  .totals-row strong { color: var(--color-ink); }
+
+  .discount-value { color: #166534 !important; }
+
+  .totals-total {
+    border-top: 1px solid var(--color-hairline);
+    padding-top: 8px;
+    font-size: 1rem;
+    font-weight: 600;
   }
 
-  .checkout-totals p {
-    margin: 4px 0 0;
+  .totals-total strong {
+    color: var(--color-primary) !important;
+    font-size: 1.15rem;
+  }
+
+  .coupon-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #166534;
+    background: #f0fdf4;
+    border: 1px solid #86efac;
+    border-radius: var(--radius-item);
+    padding: 5px 10px;
+    margin-top: 4px;
+  }
+
+  .coupon-badge[hidden] { display: none; }
+
+  .status-message {
+    margin: 0;
+    min-height: 1.4em;
+    font-size: 0.92rem;
     color: var(--color-body);
-    font-size: 0.88rem;
-    line-height: 1.5;
+  }
+
+  .status-message[data-state="error"] {
+    color: var(--color-danger);
+    font-weight: 600;
   }
 
   :global(.summary-item) {
@@ -420,6 +587,7 @@ import { tcgApi } from '../lib/tcg-api';
     gap: 16px;
     border-bottom: 1px solid var(--color-hairline);
     padding: 10px 0;
+    font-size: 0.92rem;
   }
 
   @media (max-width: 860px) {

@@ -13,10 +13,10 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       <main class="cart-view">
         <section class="page-shell cart-shell">
           <div>
-            <p class="eyebrow">Carrito local</p>
+            <p class="eyebrow">Carrito</p>
             <h1>Carrito</h1>
             <p class="lede">
-              Base visual para carrito. De momento guarda una seleccion local; el siguiente paso seria conectarlo a WooCommerce Store API checkout.
+              Revisa tu seleccion antes de continuar al pago. El stock y los precios se revalidan al crear el pedido.
             </p>
           </div>
 
@@ -31,13 +31,46 @@ import BaseLayout from '../layouts/BaseLayout.astro';
               <p>Anade productos desde la tienda para probar el flujo base.</p>
               <a class="button button-primary" href="/tienda">Ir a tienda</a>
             </div>
+
             <aside class="cart-summary" id="cart-summary" hidden>
-              <div>
-                <span>Subtotal</span>
-                <strong id="cart-subtotal">0,00 €</strong>
+              <div class="coupon-row">
+                <form id="coupon-form" class="coupon-form">
+                  <input id="coupon-input" class="coupon-input" type="text" placeholder="Codigo de cupon" autocomplete="off" aria-label="Codigo de cupon" />
+                  <button class="button button-secondary" type="submit" id="coupon-apply">Aplicar</button>
+                </form>
+                <p id="coupon-applied" class="coupon-applied" hidden>
+                  <span id="coupon-applied-label"></span>
+                  <button type="button" id="coupon-remove" class="coupon-remove" aria-label="Quitar cupon">&#x2715;</button>
+                </p>
+                <p id="coupon-error" class="coupon-error" hidden></p>
               </div>
-              <p id="cart-notice">Impuestos y envio se calcularan en checkout cuando esten configurados.</p>
+
+              <div class="totals-block">
+                <div class="totals-row">
+                  <span>Subtotal</span>
+                  <strong id="cart-subtotal">0,00 €</strong>
+                </div>
+                <div class="totals-row" id="discount-row" hidden>
+                  <span id="discount-label">Descuento</span>
+                  <strong id="cart-discount" class="discount-value"></strong>
+                </div>
+                <div class="totals-row">
+                  <span id="shipping-label">Envio</span>
+                  <strong id="cart-shipping">0,00 €</strong>
+                </div>
+                <div class="totals-row" id="tax-row" hidden>
+                  <span id="tax-label">Impuestos</span>
+                  <strong id="cart-tax"></strong>
+                </div>
+                <div class="totals-row totals-total">
+                  <span>Total</span>
+                  <strong id="cart-total">0,00 €</strong>
+                </div>
+              </div>
+
+              <p id="cart-notice" class="cart-notice"></p>
             </aside>
+
             <div class="cart-actions" id="cart-actions" hidden>
               <a class="button button-primary" href="/checkout">Continuar compra</a>
               <button class="button button-secondary" id="clear-cart" type="button">Vaciar carrito</button>
@@ -55,27 +88,44 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
   <script>
     import { clearCart, readActiveCart, removeCartItem, updateCartItem } from '../lib/cart';
+    import { csrfHeaders } from '../lib/security';
+    import { tcgApi } from '../lib/tcg-api';
     import { addWishlistItem, readWishlist } from '../lib/wishlist';
 
     const _loginUrl = `/login?next=${encodeURIComponent('/carrito')}`;
     let wishlistIds = null;
     let cartItems = [];
+    let totalsData = null;
 
-    const itemsRoot = document.querySelector('#cart-items');
-    const emptyRoot = document.querySelector('#cart-empty');
-    const actionsRoot = document.querySelector('#cart-actions');
-    const summaryRoot = document.querySelector('#cart-summary');
-    const subtotalRoot = document.querySelector('#cart-subtotal');
-    const noticeRoot = document.querySelector('#cart-notice');
-    const clearButton = document.querySelector('#clear-cart');
-    const skeletonRoot = document.querySelector('#cart-skeleton');
+    const itemsRoot     = document.querySelector('#cart-items');
+    const emptyRoot     = document.querySelector('#cart-empty');
+    const actionsRoot   = document.querySelector('#cart-actions');
+    const summaryRoot   = document.querySelector('#cart-summary');
+    const skeletonRoot  = document.querySelector('#cart-skeleton');
+    const noticeRoot    = document.querySelector('#cart-notice');
+    const clearButton   = document.querySelector('#clear-cart');
+
+    const subtotalEl   = document.querySelector('#cart-subtotal');
+    const discountRow  = document.querySelector('#discount-row');
+    const discountLbl  = document.querySelector('#discount-label');
+    const discountEl   = document.querySelector('#cart-discount');
+    const shippingLbl  = document.querySelector('#shipping-label');
+    const shippingEl   = document.querySelector('#cart-shipping');
+    const taxRow       = document.querySelector('#tax-row');
+    const taxLbl       = document.querySelector('#tax-label');
+    const taxEl        = document.querySelector('#cart-tax');
+    const totalEl      = document.querySelector('#cart-total');
+
+    const couponForm    = document.querySelector('#coupon-form');
+    const couponInput   = document.querySelector('#coupon-input');
+    const couponApply   = document.querySelector('#coupon-apply');
+    const couponApplied = document.querySelector('#coupon-applied');
+    const couponLabel   = document.querySelector('#coupon-applied-label');
+    const couponRemove  = document.querySelector('#coupon-remove');
+    const couponError   = document.querySelector('#coupon-error');
 
     const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, (char) => ({
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#039;',
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;',
     }[char]));
 
     const formatMoney = (value) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(value);
@@ -146,6 +196,129 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       }
     };
 
+    const renderTotals = (data) => {
+      if (!data) {
+        const sub = cartItems.reduce((sum, item) => sum + itemSubtotal(item), 0);
+        if (subtotalEl) subtotalEl.textContent = formatMoney(sub);
+        if (totalEl) totalEl.textContent = formatMoney(sub);
+        if (discountRow) discountRow.hidden = true;
+        if (taxRow) taxRow.hidden = true;
+        if (shippingEl) shippingEl.textContent = '0,00 €';
+        return;
+      }
+
+      if (subtotalEl) subtotalEl.textContent = data.subtotal || formatMoney(data.subtotal_raw || 0);
+      if (shippingLbl) shippingLbl.textContent = data.shipping_label || 'Envio';
+      if (shippingEl) shippingEl.textContent = data.shipping || '0,00 €';
+      if (totalEl) totalEl.textContent = data.total || formatMoney(data.total_raw || 0);
+
+      if (discountRow && discountEl) {
+        const hasDiscount = data.discount_raw > 0;
+        discountRow.hidden = !hasDiscount;
+        if (hasDiscount) {
+          if (discountLbl) discountLbl.textContent = data.coupon_label || 'Descuento';
+          discountEl.textContent = data.discount || '';
+        }
+      }
+
+      if (taxRow && taxEl) {
+        const hasTax = data.tax_raw > 0;
+        taxRow.hidden = !hasTax;
+        if (hasTax) {
+          if (taxLbl) taxLbl.textContent = data.tax_label || 'Impuestos';
+          taxEl.textContent = data.tax || '';
+        }
+      }
+
+      if (couponApplied && couponLabel) {
+        if (data.coupon_code) {
+          couponApplied.hidden = false;
+          couponLabel.textContent = data.coupon_label || ('Cupon: ' + data.coupon_code.toUpperCase());
+          if (couponInput) couponInput.value = data.coupon_code;
+        } else {
+          couponApplied.hidden = true;
+          if (couponInput) couponInput.value = '';
+        }
+      }
+    };
+
+    const loadTotals = async () => {
+      try {
+        const isAuth = localStorage.getItem('tcg.authenticated') === '1';
+        if (!isAuth) return;
+        const resp = await fetch(tcgApi.cartTotals, { credentials: 'include' });
+        if (!resp.ok) return;
+        const payload = await resp.json().catch(() => ({}));
+        totalsData = payload.data || null;
+        renderTotals(totalsData);
+      } catch {
+        renderTotals(null);
+      }
+    };
+
+    const setCouponLoading = (loading) => {
+      if (couponApply) couponApply.disabled = loading;
+      if (couponInput) couponInput.disabled = loading;
+    };
+
+    const showCouponError = (msg) => {
+      if (couponError) {
+        couponError.textContent = msg;
+        couponError.hidden = !msg;
+      }
+    };
+
+    couponForm?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const code = String(couponInput?.value || '').trim();
+      if (!code) return;
+      showCouponError('');
+      setCouponLoading(true);
+
+      try {
+        const resp = await fetch(tcgApi.cartCoupon, {
+          method: 'POST',
+          credentials: 'include',
+          headers: csrfHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ code }),
+        });
+        const payload = await resp.json().catch(() => ({}));
+
+        if (!resp.ok) {
+          showCouponError(payload.message || 'No se pudo aplicar el cupon.');
+        } else {
+          totalsData = payload.data || null;
+          renderTotals(totalsData);
+          showCouponError(totalsData?.coupon_error || '');
+        }
+      } catch {
+        showCouponError('No se pudo aplicar el cupon. Intentalo de nuevo.');
+      } finally {
+        setCouponLoading(false);
+      }
+    });
+
+    couponRemove?.addEventListener('click', async () => {
+      showCouponError('');
+      setCouponLoading(true);
+
+      try {
+        const resp = await fetch(tcgApi.cartCoupon, {
+          method: 'DELETE',
+          credentials: 'include',
+          headers: csrfHeaders({}),
+        });
+        const payload = await resp.json().catch(() => ({}));
+        totalsData = payload.data || null;
+        renderTotals(totalsData);
+        if (couponInput) couponInput.value = '';
+      } catch {
+        showCouponError('No se pudo quitar el cupon.');
+      } finally {
+        setCouponLoading(false);
+      }
+    });
+
     const renderCart = (items = cartItems) => {
       const hasItems = items.length > 0;
 
@@ -156,16 +329,16 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       if (!itemsRoot) return;
 
       const hasIssues = items.some((item) => item.is_valid === false || Boolean(getItemNotice(item) && item.is_in_stock === false));
-      const subtotal = items.reduce((sum, item) => sum + itemSubtotal(item), 0);
 
-      if (subtotalRoot) subtotalRoot.textContent = formatMoney(subtotal);
       if (noticeRoot) {
         noticeRoot.textContent = hasIssues
           ? 'Hay productos que necesitan revision antes de continuar.'
-          : 'Impuestos y envio se calcularan en checkout cuando esten configurados.';
+          : '';
         noticeRoot.dataset.state = hasIssues ? 'warning' : '';
       }
       actionsRoot?.querySelector('a[href="/checkout"]')?.toggleAttribute('aria-disabled', hasIssues);
+
+      renderTotals(totalsData);
 
       itemsRoot.innerHTML = items.map((item) => {
         const id = Number(item.id);
@@ -221,6 +394,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         try {
           cartItems = await updateCartItem(id, nextQuantity);
           renderCart(cartItems);
+          loadTotals();
         } catch (error) {
           if (noticeRoot) {
             noticeRoot.dataset.state = 'warning';
@@ -250,6 +424,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         btn.addEventListener('click', async () => {
           cartItems = await removeCartItem(Number(btn.dataset.id));
           renderCart(cartItems);
+          loadTotals();
         });
       });
     };
@@ -258,6 +433,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       clearButton.addEventListener('click', async () => {
         cartItems = await clearCart();
         renderCart(cartItems);
+        totalsData = null;
+        renderTotals(null);
       });
     }
 
@@ -275,10 +452,12 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       if (detail.action === 'removed') wishlistIds.delete(productId);
       renderCart(cartItems);
     });
+
     Promise.all([hydrateWishlistState(), readActiveCart()])
       .then(([, items]) => {
         cartItems = items;
         renderCart(cartItems);
+        if (items.length > 0) loadTotals();
       })
       .catch(() => {
         cartItems = [];
@@ -373,23 +552,12 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     gap: 10px;
   }
 
-  .cart-skeleton div span:first-child {
-    width: 72%;
-    height: 14px;
-  }
-
-  .cart-skeleton div span:last-child {
-    width: 42%;
-    height: 12px;
-  }
-
-  .cart-skeleton article > span:last-child {
-    width: 68px;
-    height: 30px;
-  }
+  .cart-skeleton div span:first-child { width: 72%; height: 14px; }
+  .cart-skeleton div span:last-child  { width: 42%; height: 12px; }
+  .cart-skeleton article > span:last-child { width: 68px; height: 30px; }
 
   @keyframes cart-skeleton-pulse {
-    0% { background-position: 100% 0; }
+    0%   { background-position: 100% 0; }
     100% { background-position: -100% 0; }
   }
 
@@ -401,36 +569,121 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
   .cart-summary {
     display: grid;
-    gap: 8px;
+    gap: 14px;
     border-top: 1px solid var(--color-hairline);
     padding-top: 14px;
   }
 
-  .cart-summary[hidden] {
-    display: none;
+  .cart-summary[hidden] { display: none; }
+
+  /* Cupón */
+  .coupon-row {
+    display: grid;
+    gap: 8px;
   }
 
-  .cart-summary > div {
+  .coupon-form {
+    display: flex;
+    gap: 8px;
+  }
+
+  .coupon-input {
+    flex: 1;
+    height: 38px;
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-item);
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font: inherit;
+    padding: 0 12px;
+    font-size: 0.9rem;
+  }
+
+  .coupon-input:focus {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
+  }
+
+  .coupon-applied {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: #166534;
+    background: #f0fdf4;
+    border: 1px solid #86efac;
+    border-radius: var(--radius-item);
+    padding: 6px 12px;
+  }
+
+  .coupon-applied[hidden] { display: none; }
+
+  .coupon-remove {
+    margin-left: auto;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.88rem;
+    color: #166534;
+    padding: 0 2px;
+    line-height: 1;
+  }
+
+  .coupon-error {
+    margin: 0;
+    font-size: 0.84rem;
+    color: #9a3412;
+    font-weight: 600;
+  }
+
+  .coupon-error[hidden] { display: none; }
+
+  /* Totales */
+  .totals-block {
+    display: grid;
+    gap: 8px;
+  }
+
+  .totals-row {
     display: flex;
     justify-content: space-between;
     gap: 16px;
     font-size: 0.95rem;
   }
 
-  .cart-summary strong {
-    color: var(--color-primary);
+  .totals-row[hidden] { display: none; }
+
+  .totals-row strong {
+    color: var(--color-ink);
+  }
+
+  .discount-value {
+    color: #166534 !important;
+  }
+
+  .totals-total {
+    border-top: 1px solid var(--color-hairline);
+    padding-top: 8px;
+    font-size: 1rem;
+  }
+
+  .totals-total strong {
+    color: var(--color-primary) !important;
     font-size: 1.2rem;
   }
 
-  .cart-summary p {
+  .cart-notice {
     margin: 0;
-    color: var(--color-body);
     font-size: 0.88rem;
+    color: var(--color-body);
     line-height: 1.5;
   }
 
-  .cart-summary p[data-state="warning"] {
+  .cart-notice[data-state="warning"] {
     color: #9a3412;
+    font-weight: 600;
   }
 
   /* Elementos creados via innerHTML — necesitan :global() para saltarse el scope de Astro */
@@ -464,11 +717,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     font-size: 1.3rem;
   }
 
-  :global(.item-media img) {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
+  :global(.item-media img) { width: 100%; height: 100%; object-fit: cover; }
 
   :global(.item-info strong) {
     display: block;
@@ -510,16 +759,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     text-align: center;
   }
 
-  :global(.quantity-step) {
-    cursor: pointer;
-    color: var(--color-primary);
-    font-weight: 800;
-  }
-
-  :global(.quantity-step:disabled) {
-    cursor: not-allowed;
-    color: var(--color-muted);
-  }
+  :global(.quantity-step) { cursor: pointer; color: var(--color-primary); font-weight: 800; }
+  :global(.quantity-step:disabled) { cursor: not-allowed; color: var(--color-muted); }
 
   :global(.quantity-input) {
     border-right: 1px solid var(--color-hairline);
@@ -528,16 +769,9 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     font-weight: 700;
   }
 
-  :global(.cart-actions a[aria-disabled="true"]) {
-    pointer-events: none;
-    opacity: 0.55;
-  }
+  :global(.cart-actions a[aria-disabled="true"]) { pointer-events: none; opacity: 0.55; }
 
-  :global(.item-actions) {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-  }
+  :global(.item-actions) { display: inline-flex; align-items: center; gap: 8px; }
 
   :global(.wishlist-item) {
     display: inline-flex;
@@ -564,25 +798,13 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
   :global(.wishlist-item .heart-filled),
   :global(.wishlist-item[aria-pressed="true"] .heart-empty),
-  :global(.wishlist-item.is-active .heart-empty) {
-    display: none;
-  }
+  :global(.wishlist-item.is-active .heart-empty) { display: none; }
 
   :global(.wishlist-item[aria-pressed="true"] .heart-filled),
-  :global(.wishlist-item.is-active .heart-filled) {
-    display: block;
-  }
+  :global(.wishlist-item.is-active .heart-filled) { display: block; }
 
-  :global(.wishlist-item:disabled) {
-    cursor: wait;
-    opacity: 0.7;
-  }
-
-  :global(.wishlist-item.is-error) {
-    border-color: var(--color-danger);
-    background: #fde8e8;
-    color: var(--color-danger);
-  }
+  :global(.wishlist-item:disabled) { cursor: wait; opacity: 0.7; }
+  :global(.wishlist-item.is-error) { border-color: var(--color-danger); background: #fde8e8; color: var(--color-danger); }
 
   :global(.remove-item) {
     display: inline-flex;
@@ -599,27 +821,15 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     transition: background 0.15s;
   }
 
-  :global(.remove-item:hover) {
-    background: #e53935;
-    color: #fff;
-  }
+  :global(.remove-item:hover) { background: #e53935; color: #fff; }
 
-  [hidden] {
-    display: none;
-  }
+  [hidden] { display: none; }
 
   @media (max-width: 860px) {
-    .cart-shell {
-      grid-template-columns: 1fr;
-    }
+    .cart-shell { grid-template-columns: 1fr; }
 
-    :global(.cart-item) {
-      grid-template-columns: 1fr;
-    }
-
+    :global(.cart-item) { grid-template-columns: 1fr; }
     :global(.quantity-control),
-    :global(.item-actions) {
-      justify-self: start;
-    }
+    :global(.item-actions) { justify-self: start; }
   }
 </style>
