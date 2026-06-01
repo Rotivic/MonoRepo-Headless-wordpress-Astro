@@ -99,6 +99,11 @@ const { active = 'home' } = Astro.props;
         </div>
       </div>
       <div class="canvas-footer" id="canvas-footer">
+        <div class="canvas-total">
+          <span>Subtotal</span>
+          <strong id="canvas-subtotal">0,00 €</strong>
+        </div>
+        <p class="canvas-warning" id="canvas-warning" hidden>Revisa las cantidades antes de continuar.</p>
         <a class="button button-primary canvas-cta" href="/carrito">Ver carrito completo</a>
       </div>
     </aside>
@@ -251,6 +256,24 @@ const { active = 'home' } = Astro.props;
   const writeLocalCart = (items) => {
     try { localStorage.setItem(cartKey, JSON.stringify(items)); } catch {}
   };
+  const formatMoney = (value) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(value);
+  const itemSubtotal = (item) => {
+    const raw = Number(item.line_subtotal_raw);
+    if (Number.isFinite(raw)) return raw;
+    const price = Number(item.price_raw);
+    return Number.isFinite(price) ? price * Number(item.quantity || 1) : 0;
+  };
+  const getMaxQuantity = (item) => {
+    const max = Number(item.max_quantity);
+    return Number.isFinite(max) && max > 0 ? max : 99;
+  };
+  const getItemNotice = (item) => {
+    if (item.notice) return item.notice;
+    if (item.is_in_stock === false) return 'Sin stock';
+    const max = Number(item.max_quantity);
+    if (Number.isFinite(max) && max > 0 && Number(item.quantity || 1) > max) return `Solo quedan ${max}`;
+    return '';
+  };
   const readCart = async () => {
     try {
       if (localStorage.getItem(authKey) === '1') {
@@ -350,6 +373,8 @@ const { active = 'home' } = Astro.props;
   const canvasEmpty = document.querySelector('#canvas-empty');
   const canvasFooter = document.querySelector('#canvas-footer');
   const canvasLoading = document.querySelector('#canvas-loading');
+  const canvasSubtotal = document.querySelector('#canvas-subtotal');
+  const canvasWarning = document.querySelector('#canvas-warning');
   let canvasRenderId = 0;
 
   const updateBadge = async () => {
@@ -385,6 +410,11 @@ const { active = 'home' } = Astro.props;
     setCanvasLoading(false);
     if (canvasEmpty) canvasEmpty.style.display = hasItems ? 'none' : 'flex';
     if (canvasFooter) canvasFooter.style.display = hasItems ? 'flex' : 'none';
+    if (canvasSubtotal) canvasSubtotal.textContent = formatMoney(items.reduce((sum, item) => sum + itemSubtotal(item), 0));
+    if (canvasWarning) {
+      const hasIssues = items.some((item) => item.is_valid === false || item.is_in_stock === false || Boolean(getItemNotice(item)));
+      canvasWarning.hidden = !hasIssues;
+    }
     if (!canvasItems) return;
     canvasItems.hidden = false;
 
@@ -394,16 +424,26 @@ const { active = 'home' } = Astro.props;
       const price = escapeHtml(item.price || '-');
       const image = escapeHtml(item.image);
       const quantity = Number(item.quantity || 1);
+      const maxQuantity = getMaxQuantity(item);
+      const lineSubtotal = escapeHtml(item.line_subtotal || formatMoney(itemSubtotal(item)));
+      const notice = getItemNotice(item);
+      const isInvalid = item.is_valid === false || item.is_in_stock === false || quantity > maxQuantity;
       const saved = wishlistIds instanceof Set && wishlistIds.has(id);
 
       return `
-        <li class="canvas-item">
+        <li class="canvas-item ${isInvalid ? 'has-issue' : ''}">
           <div class="canvas-item-media">
             ${item.image ? '<img src="' + image + '" alt="" loading="lazy">' : '<span aria-hidden="true">' + name.slice(0, 1).toUpperCase() + '</span>'}
           </div>
           <div class="canvas-item-info">
             <strong>${name}</strong>
-            <p>${price} &middot; &times;${quantity}</p>
+            <p>${price} · ${lineSubtotal}</p>
+            ${notice ? `<small class="canvas-item-notice">${escapeHtml(notice)}</small>` : ''}
+            <div class="canvas-quantity" aria-label="Cantidad de ${name}">
+              <button class="canvas-qty-step" type="button" data-action="decrease" data-id="${id}" aria-label="Restar una unidad">-</button>
+              <input class="canvas-qty-input" type="number" min="1" max="${maxQuantity}" value="${quantity}" data-id="${id}" aria-label="Cantidad">
+              <button class="canvas-qty-step" type="button" data-action="increase" data-id="${id}" ${quantity >= maxQuantity ? 'disabled' : ''} aria-label="Sumar una unidad">+</button>
+            </div>
           </div>
           <div class="canvas-item-actions">
             <button class="canvas-wishlist ${saved ? 'is-active' : ''}" type="button" data-id="${id}" aria-pressed="${saved ? 'true' : 'false'}" aria-label="Guardar ${name} en wishlist">
@@ -420,6 +460,55 @@ const { active = 'home' } = Astro.props;
 
     canvasItems.querySelectorAll('.canvas-wishlist').forEach((btn) => {
       btn.addEventListener('click', () => saveCanvasWishlist(btn));
+    });
+
+    const updateCanvasQuantity = async (productId, quantity, control) => {
+      const item = canvasCartItems?.find((current) => Number(current.id) === productId);
+      const nextQuantity = Math.max(0, Math.min(item ? getMaxQuantity(item) : 99, Number(quantity) || 0));
+
+      if (control) control.disabled = true;
+
+      try {
+        if (localStorage.getItem(authKey) === '1') {
+          const response = await fetch(`${cartUrl}/${productId}`, {
+            method: 'PATCH',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+            body: JSON.stringify({ quantity: nextQuantity }),
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(payload.message || 'Cart API failed');
+          canvasCartItems = payload.data || [];
+        } else {
+          canvasCartItems = readLocalCart()
+            .map((i) => Number(i.id) === productId ? { ...i, quantity: nextQuantity } : i)
+            .filter((i) => Number(i.quantity) > 0);
+        }
+        writeLocalCart(canvasCartItems);
+        window.dispatchEvent(new CustomEvent('tcg:cart-updated', { detail: { items: canvasCartItems } }));
+      } catch {
+        if (control) control.classList.add('is-error');
+        window.setTimeout(() => control?.classList.remove('is-error'), 1200);
+      } finally {
+        renderCanvas();
+        updateBadge();
+      }
+    };
+
+    canvasItems.querySelectorAll('.canvas-qty-step').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const productId = Number(btn.dataset.id);
+        const item = canvasCartItems?.find((current) => Number(current.id) === productId);
+        const quantity = Number(item?.quantity || 1);
+        const delta = btn.dataset.action === 'increase' ? 1 : -1;
+        updateCanvasQuantity(productId, quantity + delta, btn);
+      });
+    });
+
+    canvasItems.querySelectorAll('.canvas-qty-input').forEach((input) => {
+      input.addEventListener('change', () => {
+        updateCanvasQuantity(Number(input.dataset.id), Number(input.value), input);
+      });
     });
 
     canvasItems.querySelectorAll('.canvas-remove').forEach((btn) => {
@@ -800,9 +889,30 @@ const { active = 'home' } = Astro.props;
   .canvas-empty p { margin: 0; }
 
   .canvas-footer {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
     padding: 16px 20px;
     border-top: 1px solid var(--color-hairline);
     flex-shrink: 0;
+  }
+
+  .canvas-total {
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    font-size: 0.9rem;
+  }
+
+  .canvas-total strong {
+    color: var(--color-primary);
+  }
+
+  .canvas-warning {
+    margin: 0;
+    color: #9a3412;
+    font-size: 0.82rem;
+    font-weight: 700;
   }
 
   .canvas-cta {
@@ -819,6 +929,13 @@ const { active = 'home' } = Astro.props;
     align-items: center;
     padding-bottom: 12px;
     border-bottom: 1px solid var(--color-hairline);
+  }
+
+  :global(.canvas-item.has-issue) {
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+    border-radius: 8px;
+    padding: 10px;
   }
 
   :global(.canvas-item-media) {
@@ -851,6 +968,60 @@ const { active = 'home' } = Astro.props;
     margin: 0;
     font-size: 0.82rem;
     color: var(--color-body);
+  }
+
+  :global(.canvas-item-notice) {
+    display: block;
+    margin-top: 4px;
+    color: #9a3412;
+    font-size: 0.74rem;
+    font-weight: 700;
+  }
+
+  :global(.canvas-quantity) {
+    display: inline-grid;
+    grid-template-columns: 26px 38px 26px;
+    align-items: center;
+    width: max-content;
+    margin-top: 8px;
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-pill);
+    overflow: hidden;
+    background: var(--color-canvas);
+  }
+
+  :global(.canvas-qty-step),
+  :global(.canvas-qty-input) {
+    width: 100%;
+    height: 28px;
+    border: 0;
+    background: transparent;
+    text-align: center;
+  }
+
+  :global(.canvas-qty-step) {
+    cursor: pointer;
+    color: var(--color-primary);
+    font-weight: 800;
+  }
+
+  :global(.canvas-qty-step:disabled) {
+    cursor: not-allowed;
+    color: var(--color-muted);
+  }
+
+  :global(.canvas-qty-input) {
+    border-right: 1px solid var(--color-hairline);
+    border-left: 1px solid var(--color-hairline);
+    color: var(--color-ink);
+    font-size: 0.82rem;
+    font-weight: 700;
+  }
+
+  :global(.canvas-qty-step.is-error),
+  :global(.canvas-qty-input.is-error) {
+    background: #fde8e8;
+    color: var(--color-danger);
   }
 
   .canvas-loading {

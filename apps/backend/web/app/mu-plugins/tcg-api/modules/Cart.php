@@ -267,6 +267,9 @@ final class TCG_Platform_API_Cart
             'meta' => [
                 'count' => count($items),
                 'quantity' => array_sum(array_map(static fn (array $item): int => (int) $item['quantity'], $items)),
+                'subtotal' => self::money_label(array_sum(array_map(static fn (array $item): float => (float) $item['line_subtotal_raw'], $items))),
+                'subtotal_raw' => array_sum(array_map(static fn (array $item): float => (float) $item['line_subtotal_raw'], $items)),
+                'has_issues' => count(array_filter($items, static fn (array $item): bool => ! (bool) $item['is_valid'])) > 0,
             ],
         ], $status);
     }
@@ -285,23 +288,39 @@ final class TCG_Platform_API_Cart
     {
         $image_id = $product->get_image_id();
         $image = $image_id ? wp_get_attachment_image_url($image_id, 'woocommerce_thumbnail') : '';
-        $price = function_exists('wc_price')
-            ? html_entity_decode(wp_strip_all_tags(wc_price((float) $product->get_price())), ENT_QUOTES, get_bloginfo('charset'))
-            : (string) $product->get_price();
-
+        $price_raw = (float) $product->get_price();
         $stock_quantity = $product->managing_stock() ? $product->get_stock_quantity() : null;
+        $max_quantity = $stock_quantity !== null && ! $product->backorders_allowed() ? max(0, (int) $stock_quantity) : null;
+        $is_valid = $product->is_purchasable() && $product->is_in_stock() && ($max_quantity === null || $quantity <= $max_quantity);
+        $notice = '';
+
+        if (! $product->is_purchasable()) {
+            $notice = 'Este producto ya no se puede comprar.';
+        } elseif (! $product->is_in_stock()) {
+            $notice = 'Este producto esta sin stock.';
+        } elseif ($max_quantity !== null && $quantity > $max_quantity) {
+            $notice = 'Solo quedan ' . $max_quantity . ' unidades disponibles.';
+        } elseif ($stock_quantity !== null && $stock_quantity <= 3) {
+            $notice = 'Quedan pocas unidades.';
+        }
 
         return [
             'id' => $product->get_id(),
             'product_id' => $product->get_id(),
             'slug' => $product->get_slug(),
             'name' => $product->get_name(),
-            'price' => $price,
+            'price' => self::money_label($price_raw),
+            'price_raw' => $price_raw,
+            'line_subtotal' => self::money_label($price_raw * $quantity),
+            'line_subtotal_raw' => $price_raw * $quantity,
             'image' => $image ?: '',
             'quantity' => $quantity,
             'is_in_stock' => $product->is_in_stock(),
             'stock_quantity' => $stock_quantity,
-            'max_quantity' => $stock_quantity !== null && ! $product->backorders_allowed() ? max(0, (int) $stock_quantity) : null,
+            'stock_status' => $product->get_stock_status(),
+            'max_quantity' => $max_quantity,
+            'is_valid' => $is_valid,
+            'notice' => $notice,
             'permalink' => $product->get_permalink(),
             'created_at' => $created_at,
             'updated_at' => $updated_at,
@@ -351,5 +370,14 @@ final class TCG_Platform_API_Cart
     private static function error(string $code, string $message, int $status): WP_Error
     {
         return new WP_Error($code, $message, ['status' => $status]);
+    }
+
+    private static function money_label(float $amount): string
+    {
+        if (function_exists('wc_price')) {
+            return html_entity_decode(wp_strip_all_tags(wc_price($amount)), ENT_QUOTES, get_bloginfo('charset'));
+        }
+
+        return number_format($amount, 2, '.', '');
     }
 }

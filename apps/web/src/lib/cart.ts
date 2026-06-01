@@ -11,15 +11,26 @@ export interface CartItem {
   slug: string;
   name: string;
   price: string;
+  price_raw?: number;
+  line_subtotal?: string;
+  line_subtotal_raw?: number;
   image?: string;
   quantity: number;
   is_in_stock?: boolean;
   stock_quantity?: number | null;
+  stock_status?: string;
   max_quantity?: number | null;
+  is_valid?: boolean;
+  notice?: string;
 }
 
 interface CartPayload {
   data?: CartItem[];
+  meta?: {
+    subtotal?: string;
+    subtotal_raw?: number;
+    has_issues?: boolean;
+  };
 }
 
 function isAuthenticated() {
@@ -67,7 +78,13 @@ async function cartJson<T>(url: string, options: RequestInit = {}): Promise<T> {
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(data.message || 'No se pudo actualizar el carrito.');
+    const friendlyMessages: Record<string, string> = {
+      tcg_cart_product_not_found: 'El producto ya no esta disponible.',
+      tcg_cart_product_unavailable: 'El producto ya no se puede comprar.',
+      tcg_cart_product_out_of_stock: 'El producto esta sin stock.',
+      tcg_cart_not_enough_stock: 'No queda stock suficiente para esa cantidad.',
+    };
+    throw new Error(friendlyMessages[data.code] || data.message || 'No se pudo actualizar el carrito.');
   }
 
   return data;
@@ -130,10 +147,11 @@ export async function addCartItem(item: CartItem): Promise<CartItem[]> {
 }
 
 export async function updateCartItem(id: number, quantity: number): Promise<CartItem[]> {
+  const safeQuantity = Math.max(0, Math.floor(Number(quantity) || 0));
   if (isAuthenticated()) {
     const payload = await cartJson<CartPayload>(tcgApi.cartItem(id), {
       method: 'PATCH',
-      body: JSON.stringify({ quantity }),
+      body: JSON.stringify({ quantity: safeQuantity }),
     });
     const items = (payload.data || []).map(normalizeItem);
     writeLocalCart(items, false);
@@ -142,7 +160,7 @@ export async function updateCartItem(id: number, quantity: number): Promise<Cart
   }
 
   const next = readLocalCart()
-    .map((item) => item.id === id ? { ...item, quantity } : item)
+    .map((item) => item.id === id ? { ...item, quantity: safeQuantity } : item)
     .filter((item) => item.quantity > 0);
   writeLocalCart(next);
   return next;

@@ -31,6 +31,13 @@ import BaseLayout from '../layouts/BaseLayout.astro';
               <p>Anade productos desde la tienda para probar el flujo base.</p>
               <a class="button button-primary" href="/tienda">Ir a tienda</a>
             </div>
+            <aside class="cart-summary" id="cart-summary" hidden>
+              <div>
+                <span>Subtotal</span>
+                <strong id="cart-subtotal">0,00 €</strong>
+              </div>
+              <p id="cart-notice">Impuestos y envio se calcularan en checkout cuando esten configurados.</p>
+            </aside>
             <div class="cart-actions" id="cart-actions" hidden>
               <a class="button button-primary" href="/checkout">Continuar compra</a>
               <button class="button button-secondary" id="clear-cart" type="button">Vaciar carrito</button>
@@ -47,7 +54,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   }
 
   <script>
-    import { clearCart, readActiveCart, removeCartItem } from '../lib/cart';
+    import { clearCart, readActiveCart, removeCartItem, updateCartItem } from '../lib/cart';
     import { addWishlistItem, readWishlist } from '../lib/wishlist';
 
     const _loginUrl = `/login?next=${encodeURIComponent('/carrito')}`;
@@ -57,6 +64,9 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const itemsRoot = document.querySelector('#cart-items');
     const emptyRoot = document.querySelector('#cart-empty');
     const actionsRoot = document.querySelector('#cart-actions');
+    const summaryRoot = document.querySelector('#cart-summary');
+    const subtotalRoot = document.querySelector('#cart-subtotal');
+    const noticeRoot = document.querySelector('#cart-notice');
     const clearButton = document.querySelector('#clear-cart');
     const skeletonRoot = document.querySelector('#cart-skeleton');
 
@@ -67,6 +77,28 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       '"': '&quot;',
       "'": '&#039;',
     }[char]));
+
+    const formatMoney = (value) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(value);
+
+    const itemSubtotal = (item) => {
+      const raw = Number(item.line_subtotal_raw);
+      if (Number.isFinite(raw)) return raw;
+      const price = Number(item.price_raw);
+      return Number.isFinite(price) ? price * Number(item.quantity || 1) : 0;
+    };
+
+    const getMaxQuantity = (item) => {
+      const max = Number(item.max_quantity);
+      return Number.isFinite(max) && max > 0 ? max : 99;
+    };
+
+    const getItemNotice = (item) => {
+      if (item.notice) return item.notice;
+      if (item.is_in_stock === false) return 'Este producto esta sin stock.';
+      const max = Number(item.max_quantity);
+      if (Number.isFinite(max) && max > 0 && Number(item.quantity || 1) > max) return `Solo quedan ${max} unidades.`;
+      return '';
+    };
 
     const setWishlistButtonState = (button, isSaved) => {
       button.setAttribute('aria-pressed', isSaved ? 'true' : 'false');
@@ -120,7 +152,20 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       if (skeletonRoot) skeletonRoot.hidden = true;
       if (emptyRoot) emptyRoot.style.display = hasItems ? 'none' : '';
       if (actionsRoot) actionsRoot.hidden = !hasItems;
+      if (summaryRoot) summaryRoot.hidden = !hasItems;
       if (!itemsRoot) return;
+
+      const hasIssues = items.some((item) => item.is_valid === false || Boolean(getItemNotice(item) && item.is_in_stock === false));
+      const subtotal = items.reduce((sum, item) => sum + itemSubtotal(item), 0);
+
+      if (subtotalRoot) subtotalRoot.textContent = formatMoney(subtotal);
+      if (noticeRoot) {
+        noticeRoot.textContent = hasIssues
+          ? 'Hay productos que necesitan revision antes de continuar.'
+          : 'Impuestos y envio se calcularan en checkout cuando esten configurados.';
+        noticeRoot.dataset.state = hasIssues ? 'warning' : '';
+      }
+      actionsRoot?.querySelector('a[href="/checkout"]')?.toggleAttribute('aria-disabled', hasIssues);
 
       itemsRoot.innerHTML = items.map((item) => {
         const id = Number(item.id);
@@ -128,16 +173,26 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         const price = escapeHtml(item.price || '-');
         const image = escapeHtml(item.image);
         const quantity = Number(item.quantity || 1);
+        const maxQuantity = getMaxQuantity(item);
+        const lineSubtotal = escapeHtml(item.line_subtotal || formatMoney(itemSubtotal(item)));
+        const notice = getItemNotice(item);
+        const isInvalid = item.is_valid === false || item.is_in_stock === false || quantity > maxQuantity;
         const saved = wishlistIds instanceof Set && wishlistIds.has(id);
 
         return `
-          <article class="cart-item">
+          <article class="cart-item ${isInvalid ? 'has-issue' : ''}">
             <div class="item-media">
               ${item.image ? `<img src="${image}" alt="" loading="lazy">` : `<span aria-hidden="true">${name.slice(0, 1).toUpperCase()}</span>`}
             </div>
             <div class="item-info">
               <strong>${name}</strong>
-              <p>${price} &middot; &times;${quantity}</p>
+              <p>${price} unidad · ${lineSubtotal}</p>
+              ${notice ? `<small class="item-notice">${escapeHtml(notice)}</small>` : ''}
+            </div>
+            <div class="quantity-control" aria-label="Cantidad de ${name}">
+              <button class="quantity-step" type="button" data-action="decrease" data-id="${id}" aria-label="Restar una unidad">-</button>
+              <input class="quantity-input" type="number" min="1" max="${maxQuantity}" value="${quantity}" data-id="${id}" aria-label="Cantidad">
+              <button class="quantity-step" type="button" data-action="increase" data-id="${id}" ${quantity >= maxQuantity ? 'disabled' : ''} aria-label="Sumar una unidad">+</button>
             </div>
             <div class="item-actions">
               <button class="wishlist-item ${saved ? 'is-active' : ''}" type="button" data-id="${id}" aria-pressed="${saved ? 'true' : 'false'}" aria-label="Guardar ${name} en wishlist">
@@ -154,6 +209,41 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
       itemsRoot.querySelectorAll('.wishlist-item').forEach((btn) => {
         btn.addEventListener('click', () => saveForLater(btn));
+      });
+
+      const commitQuantity = async (id, quantity, control) => {
+        const item = cartItems.find((current) => Number(current.id) === id);
+        const max = item ? getMaxQuantity(item) : 99;
+        const nextQuantity = Math.max(0, Math.min(max, Number(quantity) || 0));
+
+        if (control) control.disabled = true;
+
+        try {
+          cartItems = await updateCartItem(id, nextQuantity);
+          renderCart(cartItems);
+        } catch (error) {
+          if (noticeRoot) {
+            noticeRoot.dataset.state = 'warning';
+            noticeRoot.textContent = error instanceof Error ? error.message : 'No se pudo actualizar la cantidad.';
+          }
+          renderCart(cartItems);
+        }
+      };
+
+      itemsRoot.querySelectorAll('.quantity-step').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const id = Number(btn.dataset.id);
+          const item = cartItems.find((current) => Number(current.id) === id);
+          const quantity = Number(item?.quantity || 1);
+          const delta = btn.dataset.action === 'increase' ? 1 : -1;
+          commitQuantity(id, quantity + delta, btn);
+        });
+      });
+
+      itemsRoot.querySelectorAll('.quantity-input').forEach((input) => {
+        input.addEventListener('change', () => {
+          commitQuantity(Number(input.dataset.id), Number(input.value), input);
+        });
       });
 
       itemsRoot.querySelectorAll('.remove-item').forEach((btn) => {
@@ -309,14 +399,55 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     gap: 10px;
   }
 
+  .cart-summary {
+    display: grid;
+    gap: 8px;
+    border-top: 1px solid var(--color-hairline);
+    padding-top: 14px;
+  }
+
+  .cart-summary[hidden] {
+    display: none;
+  }
+
+  .cart-summary > div {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    font-size: 0.95rem;
+  }
+
+  .cart-summary strong {
+    color: var(--color-primary);
+    font-size: 1.2rem;
+  }
+
+  .cart-summary p {
+    margin: 0;
+    color: var(--color-body);
+    font-size: 0.88rem;
+    line-height: 1.5;
+  }
+
+  .cart-summary p[data-state="warning"] {
+    color: #9a3412;
+  }
+
   /* Elementos creados via innerHTML — necesitan :global() para saltarse el scope de Astro */
   :global(.cart-item) {
     display: grid;
-    grid-template-columns: 64px 1fr auto;
+    grid-template-columns: 64px minmax(0, 1fr) auto auto;
     gap: 14px;
     align-items: center;
     border-bottom: 1px solid var(--color-hairline);
     padding-bottom: 12px;
+  }
+
+  :global(.cart-item.has-issue) {
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+    border-radius: var(--radius-item);
+    padding: 12px;
   }
 
   :global(.item-media) {
@@ -350,6 +481,56 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     margin: 0;
     color: var(--color-body);
     font-size: 0.88rem;
+  }
+
+  :global(.item-notice) {
+    display: block;
+    margin-top: 5px;
+    color: #9a3412;
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+
+  :global(.quantity-control) {
+    display: inline-grid;
+    grid-template-columns: 30px 46px 30px;
+    align-items: center;
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-pill);
+    overflow: hidden;
+    background: var(--color-canvas);
+  }
+
+  :global(.quantity-step),
+  :global(.quantity-input) {
+    width: 100%;
+    height: 32px;
+    border: 0;
+    background: transparent;
+    text-align: center;
+  }
+
+  :global(.quantity-step) {
+    cursor: pointer;
+    color: var(--color-primary);
+    font-weight: 800;
+  }
+
+  :global(.quantity-step:disabled) {
+    cursor: not-allowed;
+    color: var(--color-muted);
+  }
+
+  :global(.quantity-input) {
+    border-right: 1px solid var(--color-hairline);
+    border-left: 1px solid var(--color-hairline);
+    color: var(--color-ink);
+    font-weight: 700;
+  }
+
+  :global(.cart-actions a[aria-disabled="true"]) {
+    pointer-events: none;
+    opacity: 0.55;
   }
 
   :global(.item-actions) {
@@ -434,6 +615,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
     :global(.cart-item) {
       grid-template-columns: 1fr;
+    }
+
+    :global(.quantity-control),
+    :global(.item-actions) {
+      justify-self: start;
     }
   }
 </style>
