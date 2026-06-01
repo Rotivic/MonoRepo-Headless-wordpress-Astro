@@ -78,7 +78,7 @@ final class TCG_Platform_API_Wishlist
             $user_id
         ));
 
-        $items = array_map([self::class, 'item_payload_from_row'], $rows ?: []);
+        $items = self::items_payload_from_rows($rows ?: []);
 
         return new WP_REST_Response([
             'data' => array_values(array_filter($items)),
@@ -138,15 +138,38 @@ final class TCG_Platform_API_Wishlist
         ];
     }
 
-    private static function item_payload_from_row(object $row): ?array
+    private static function items_payload_from_rows(array $rows): array
     {
-        $product = self::get_product((int) $row->product_id);
-
-        if (! $product instanceof WC_Product) {
-            return null;
+        $ids = array_values(array_filter(array_map(static fn (object $row): int => absint($row->product_id), $rows)));
+        if ($ids === [] || ! function_exists('wc_get_products')) {
+            return [];
         }
 
-        return self::item_payload($product, (string) $row->created_at);
+        $products = wc_get_products([
+            'include' => $ids,
+            'limit' => count($ids),
+            'return' => 'objects',
+            'status' => ['publish'],
+        ]);
+
+        $by_id = [];
+        foreach ($products as $product) {
+            if ($product instanceof WC_Product) {
+                $by_id[$product->get_id()] = $product;
+            }
+        }
+
+        $items = [];
+        foreach ($rows as $row) {
+            $product_id = absint($row->product_id);
+            if (! isset($by_id[$product_id])) {
+                continue;
+            }
+
+            $items[] = self::item_payload($by_id[$product_id], (string) $row->created_at);
+        }
+
+        return $items;
     }
 
     private static function item_payload(WC_Product $product, string $created_at = ''): array

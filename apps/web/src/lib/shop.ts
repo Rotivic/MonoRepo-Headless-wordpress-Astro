@@ -101,6 +101,37 @@ export const shopApiInternal = {
   products: `${siteConfig.internalApiUrl}/wc/store/v1/products`,
 };
 
+export const storeProductFields = [
+  'id',
+  'name',
+  'slug',
+  'type',
+  'description',
+  'short_description',
+  'permalink',
+  'images',
+  'prices',
+  'is_in_stock',
+  'on_sale',
+  'is_featured',
+  'low_stock_remaining',
+  'stock_quantity',
+  'stock_status',
+  'categories',
+  'tags',
+  'attributes',
+  'variations',
+  'add_to_cart',
+].join(',');
+
+export const storeCategoryFields = 'id,name,slug,count';
+
+export function addStoreFields(url: URL | string, fields = storeProductFields): string {
+  const next = typeof url === 'string' ? new URL(url) : url;
+  next.searchParams.set('_fields', fields);
+  return next.toString();
+}
+
 export function formatStorePrice(prices?: StoreProductPrice): string {
   if (!prices) return '-';
   const value = Number(prices.price) / 10 ** prices.currency_minor_unit;
@@ -164,5 +195,5 @@ export function buildProductsUrl(params: ShopQueryParams = {}): string {
   if (min_price !== undefined) url.searchParams.set('min_price', String(Math.round(min_price * 100)));
   if (max_price !== undefined) url.searchParams.set('max_price', String(Math.round(max_price * 100)));
 
-  return url.toString();
+  return addStoreFields(url);
 }

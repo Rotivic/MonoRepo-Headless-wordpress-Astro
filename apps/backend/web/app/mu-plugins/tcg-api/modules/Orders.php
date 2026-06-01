@@ -35,6 +35,18 @@ final class TCG_Platform_API_Orders
             'permission_callback' => ['TCG_Platform_API', 'require_auth'],
         ]);
 
+        register_rest_route($namespace, '/admin/sales/orders', [
+            'methods' => WP_REST_Server::READABLE,
+            'callback' => [self::class, 'sales_orders'],
+            'permission_callback' => ['TCG_Platform_API', 'require_auth'],
+        ]);
+
+        register_rest_route($namespace, '/admin/sales/orders/(?P<id>\d+)', [
+            'methods' => WP_REST_Server::READABLE,
+            'callback' => [self::class, 'sales_order'],
+            'permission_callback' => ['TCG_Platform_API', 'require_auth'],
+        ]);
+
         register_rest_route($namespace, '/admin/inventory', [
             'methods' => WP_REST_Server::READABLE,
             'callback' => [self::class, 'inventory'],
@@ -56,7 +68,7 @@ final class TCG_Platform_API_Orders
         ]);
 
         return new WP_REST_Response([
-            'data' => array_values(array_map([self::class, 'order_payload'], $orders)),
+            'data' => array_values(array_map([self::class, 'order_summary_payload'], $orders)),
         ]);
     }
 
@@ -144,8 +156,14 @@ final class TCG_Platform_API_Orders
         $date_to = sanitize_text_field((string) $request->get_param('date_to'));
         $date_query = self::date_query($date_from, $date_to);
 
+        $cache_key = 'tcg_sales_summary_' . md5($date_from . '|' . $date_to);
+        $cached = get_transient($cache_key);
+        if (is_array($cached)) {
+            return new WP_REST_Response(['data' => $cached]);
+        }
+
         $orders = wc_get_orders([
-            'limit' => 250,
+            'limit' => 500,
             'orderby' => 'date',
             'order' => 'DESC',
             'status' => array_keys(wc_get_order_statuses()),
@@ -179,20 +197,89 @@ final class TCG_Platform_API_Orders
             }
         }
 
-        return new WP_REST_Response([
-            'data' => [
-                'metrics' => [
-                    'orders' => count($orders),
-                    'revenue' => self::money($total),
-                    'pending' => $pending,
-                ],
-                'chart' => array_values($chart),
-                'orders' => array_values(array_map([self::class, 'order_payload'], $orders)),
-                'range' => [
-                    'from' => $date_from,
-                    'to' => $date_to,
-                ],
+        $data = [
+            'metrics' => [
+                'orders' => count($orders),
+                'revenue' => self::money($total),
+                'pending' => $pending,
             ],
+            'chart' => array_values($chart),
+            'range' => [
+                'from' => $date_from,
+                'to' => $date_to,
+            ],
+        ];
+
+        set_transient($cache_key, $data, 30);
+
+        return new WP_REST_Response(['data' => $data]);
+    }
+
+    public static function sales_orders(WP_REST_Request $request): WP_REST_Response|WP_Error
+    {
+        if (! self::can_access_sales()) {
+            return self::error('tcg_sales_forbidden', 'Backoffice permissions are required.', 403);
+        }
+
+        if (! function_exists('wc_get_orders')) {
+            return self::error('tcg_sales_woocommerce_missing', 'WooCommerce is not available.', 503);
+        }
+
+        $page = max(1, absint($request->get_param('page') ?: 1));
+        $per_page = min(30, max(5, absint($request->get_param('per_page') ?: 8)));
+        $date_from = sanitize_text_field((string) $request->get_param('date_from'));
+        $date_to = sanitize_text_field((string) $request->get_param('date_to'));
+        $search = sanitize_text_field((string) $request->get_param('search'));
+        $date_query = self::date_query($date_from, $date_to);
+
+        $args = [
+            'limit' => $per_page,
+            'page' => $page,
+            'paginate' => true,
+            'orderby' => 'date',
+            'order' => 'DESC',
+            'status' => array_keys(wc_get_order_statuses()),
+            ...($date_query ? ['date_created' => $date_query] : []),
+        ];
+
+        if ($search !== '') {
+            $args['search'] = '*' . $search . '*';
+            $args['search_columns'] = ['ID', 'billing_email', 'billing_first_name', 'billing_last_name'];
+        }
+
+        $result = wc_get_orders($args);
+        $orders = is_object($result) && isset($result->orders) ? $result->orders : [];
+        $total = is_object($result) && isset($result->total) ? (int) $result->total : count($orders);
+        $total_pages = is_object($result) && isset($result->max_num_pages) ? (int) $result->max_num_pages : 1;
+
+        return new WP_REST_Response([
+            'data' => array_values(array_map([self::class, 'order_summary_payload'], $orders)),
+            'meta' => [
+                'page' => $page,
+                'per_page' => $per_page,
+                'total' => $total,
+                'total_pages' => $total_pages,
+            ],
+        ]);
+    }
+
+    public static function sales_order(WP_REST_Request $request): WP_REST_Response|WP_Error
+    {
+        if (! self::can_access_sales()) {
+            return self::error('tcg_sales_forbidden', 'Backoffice permissions are required.', 403);
+        }
+
+        if (! function_exists('wc_get_order')) {
+            return self::error('tcg_sales_woocommerce_missing', 'WooCommerce is not available.', 503);
+        }
+
+        $order = wc_get_order(absint($request['id']));
+        if (! $order instanceof WC_Order) {
+            return self::error('tcg_sales_order_not_found', 'Order not found.', 404);
+        }
+
+        return new WP_REST_Response([
+            'data' => self::order_payload($order, true),
         ]);
     }
 
@@ -314,6 +401,27 @@ final class TCG_Platform_API_Orders
         return $payload;
     }
 
+    private static function order_summary_payload(WC_Order $order): array
+    {
+        $status = $order->get_status();
+
+        return [
+            'id' => $order->get_id(),
+            'number' => $order->get_order_number(),
+            'status' => $status,
+            'status_label' => wc_get_order_status_name($status),
+            'created_at' => $order->get_date_created()?->date(DATE_ATOM),
+            'total' => html_entity_decode(wp_strip_all_tags($order->get_formatted_order_total()), ENT_QUOTES, get_bloginfo('charset')),
+            'item_count' => $order->get_item_count(),
+            'payment_method_title' => $order->get_payment_method_title(),
+            'edit_url' => admin_url('admin.php?page=wc-orders&action=edit&id=' . $order->get_id()),
+            'billing' => [
+                'name' => trim($order->get_billing_first_name() . ' ' . $order->get_billing_last_name()),
+                'email' => $order->get_billing_email(),
+            ],
+        ];
+    }
+
     private static function get_user_order(int $order_id): WC_Order|WP_Error
     {
         if (! function_exists('wc_get_order')) {
@@ -423,7 +531,7 @@ final class TCG_Platform_API_Orders
         $variation_stock = null;
 
         if ($product instanceof WC_Product_Variable) {
-            $variation_stock = self::variation_stock_summary($product);
+            $variation_stock = self::cached_variation_stock_summary($product);
             $stock_quantity = $variation_stock['total_managed_stock'];
         }
 
@@ -484,8 +592,27 @@ final class TCG_Platform_API_Orders
         ];
     }
 
+    private static function cached_variation_stock_summary(WC_Product_Variable $product): array
+    {
+        $cache_key = 'tcg_variation_stock_' . $product->get_id();
+        $cached = get_transient($cache_key);
+        if (is_array($cached)) {
+            return $cached;
+        }
+
+        $summary = self::variation_stock_summary($product);
+        set_transient($cache_key, $summary, 120);
+
+        return $summary;
+    }
+
     private static function inventory_alerts(): array
     {
+        $cached = get_transient('tcg_inventory_alerts');
+        if (is_array($cached)) {
+            return $cached;
+        }
+
         $low = [];
         $empty = [];
 
@@ -512,10 +639,14 @@ final class TCG_Platform_API_Orders
             }
         }
 
-        return [
+        $alerts = [
             'low_stock' => array_slice($low, 0, 8),
             'out_of_stock' => array_slice($empty, 0, 8),
         ];
+
+        set_transient('tcg_inventory_alerts', $alerts, 60);
+
+        return $alerts;
     }
 
     private static function can_access_sales(): bool

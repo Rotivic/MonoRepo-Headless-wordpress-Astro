@@ -34,6 +34,29 @@ interface CartPayload {
   };
 }
 
+export interface CartTotals {
+  subtotal_raw?: number;
+  subtotal?: string;
+  coupon_code?: string;
+  coupon_label?: string;
+  coupon_error?: string;
+  discount_raw?: number;
+  discount?: string;
+  shipping_method?: string;
+  shipping_label?: string;
+  shipping_raw?: number;
+  shipping?: string;
+  shipping_methods?: Array<{ id: string; label: string; cost_raw: number; cost: string }>;
+  tax_raw?: number;
+  tax?: string;
+  tax_label?: string;
+  total_raw?: number;
+  total?: string;
+}
+
+const totalsCache = new Map<string, { time: number; data: CartTotals }>();
+const totalsTtl = 10_000;
+
 function isAuthenticated() {
   try {
     return window.localStorage.getItem(authKey) === '1';
@@ -96,6 +119,24 @@ async function cartJson<T>(url: string, options: RequestInit = {}): Promise<T> {
 
 function dispatchCartUpdated(items?: CartItem[]) {
   window.dispatchEvent(new CustomEvent('tcg:cart-updated', { detail: { items } }));
+}
+
+function clearTotalsCache() {
+  totalsCache.clear();
+}
+
+export async function readCartTotals(shippingMethod = ''): Promise<CartTotals | null> {
+  if (!isAuthenticated()) return null;
+  const url = new URL(tcgApi.cartTotals);
+  if (shippingMethod) url.searchParams.set('shipping_method', shippingMethod);
+  const key = url.toString();
+  const cached = totalsCache.get(key);
+  if (cached && Date.now() - cached.time < totalsTtl) return cached.data;
+
+  const payload = await cartJson<{ data?: CartTotals }>(key);
+  const data = payload.data || null;
+  if (data) totalsCache.set(key, { time: Date.now(), data });
+  return data;
 }
 
 export function readCart(): CartItem[] {
@@ -168,6 +209,7 @@ export async function addCartItem(item: CartItem): Promise<CartItem[]> {
     });
     const items = (payload.data || []).map(normalizeItem);
     writeLocalCart(items, false);
+    clearTotalsCache();
     dispatchCartUpdated(items);
     return items;
   }
@@ -194,6 +236,7 @@ export async function updateCartItem(id: number, quantity: number): Promise<Cart
     });
     const items = (payload.data || []).map(normalizeItem);
     writeLocalCart(items, false);
+    clearTotalsCache();
     dispatchCartUpdated(items);
     return items;
   }
@@ -210,6 +253,7 @@ export async function removeCartItem(id: number): Promise<CartItem[]> {
     const payload = await cartJson<CartPayload>(tcgApi.cartItem(id), { method: 'DELETE' });
     const items = (payload.data || []).map(normalizeItem);
     writeLocalCart(items, false);
+    clearTotalsCache();
     dispatchCartUpdated(items);
     return items;
   }
@@ -224,6 +268,7 @@ export async function clearCart(): Promise<CartItem[]> {
     const payload = await cartJson<CartPayload>(tcgApi.cart, { method: 'DELETE' });
     const items = (payload.data || []).map(normalizeItem);
     writeLocalCart(items, false);
+    clearTotalsCache();
     dispatchCartUpdated(items);
     return items;
   }
@@ -256,6 +301,7 @@ export async function mergePendingCart(): Promise<CartItem[]> {
   try {
     window.localStorage.removeItem(pendingMergeKey);
   } catch {}
+  clearTotalsCache();
   dispatchCartUpdated(items);
   return items;
 }

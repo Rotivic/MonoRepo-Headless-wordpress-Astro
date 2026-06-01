@@ -87,7 +87,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   }
 
   <script>
-    import { clearCart, readActiveCart, removeCartItem, updateCartItem } from '../lib/cart';
+    import { clearCart, readActiveCart, readCartTotals, removeCartItem, updateCartItem } from '../lib/cart';
     import { csrfHeaders } from '../lib/security';
     import { tcgApi } from '../lib/tcg-api';
     import { addWishlistItem, readWishlist } from '../lib/wishlist';
@@ -246,10 +246,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       try {
         const isAuth = localStorage.getItem('tcg.authenticated') === '1';
         if (!isAuth) return;
-        const resp = await fetch(tcgApi.cartTotals, { credentials: 'include' });
-        if (!resp.ok) return;
-        const payload = await resp.json().catch(() => ({}));
-        totalsData = payload.data || null;
+        totalsData = await readCartTotals();
         renderTotals(totalsData);
       } catch {
         renderTotals(null);

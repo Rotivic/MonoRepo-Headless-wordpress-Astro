@@ -96,7 +96,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     )
   }
 
-  <script define:vars={{ meUrl: tcgApi.me, salesUrl: tcgApi.adminSales }}>
+  <script define:vars={{ meUrl: tcgApi.me, salesUrl: tcgApi.adminSales, salesOrdersUrl: tcgApi.adminSalesOrders }}>
     import { cachedJson } from '../lib/fetch-cache';
 
     const page = document.querySelector('#backoffice-page');
@@ -121,9 +121,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const dateTo = document.querySelector('#date-to');
     const exportCsv = document.querySelector('#export-csv');
     const rangeLabel = document.querySelector('#sales-range-label');
-    let allOrders = [];
-    let filteredOrders = [];
+    let orders = [];
     let currentPage = 1;
+    let totalPages = 1;
+    let totalOrders = 0;
+    let searchTimer = null;
     const perPage = 8;
 
     const isoDate = (date) => date.toISOString().slice(0, 10);
@@ -163,31 +165,18 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         `;
       }
 
-      allOrders = data.orders || [];
-      filteredOrders = allOrders;
       if (rangeLabel) rangeLabel.textContent = `${data.range?.from || dateFrom?.value || ''} - ${data.range?.to || dateTo?.value || ''}`;
-      renderOrdersTable();
     };
 
-    const orderSearchText = (order) => [
-      order.number,
-      order.id,
-      order.status_label,
-      order.status,
-      order.total,
-      order.billing?.name,
-      order.billing?.email,
-      order.payment_method_title,
-    ].join(' ').toLowerCase();
-
-    const renderOrdersTable = () => {
+    const renderOrdersTable = (data, meta = {}) => {
       if (!ordersTable) return;
-      const totalPages = Math.max(1, Math.ceil(filteredOrders.length / perPage));
-      currentPage = Math.min(currentPage, totalPages);
-      const visible = filteredOrders.slice((currentPage - 1) * perPage, currentPage * perPage);
+      orders = data || [];
+      currentPage = Number(meta.page || currentPage);
+      totalPages = Math.max(1, Number(meta.total_pages || 1));
+      totalOrders = Number(meta.total || orders.length);
 
-      if (ordersCount) ordersCount.textContent = `${filteredOrders.length} resultado${filteredOrders.length === 1 ? '' : 's'}`;
-      if (pagination) pagination.hidden = filteredOrders.length <= perPage;
+      if (ordersCount) ordersCount.textContent = `${totalOrders} resultado${totalOrders === 1 ? '' : 's'}`;
+      if (pagination) pagination.hidden = totalPages <= 1;
       pagination?.querySelector('[data-pagination-status]') && (pagination.querySelector('[data-pagination-status]').textContent = `Pagina ${currentPage} de ${totalPages}`);
       pagination?.querySelector('[data-pagination-prev]') && (pagination.querySelector('[data-pagination-prev]').disabled = currentPage <= 1);
       pagination?.querySelector('[data-pagination-next]') && (pagination.querySelector('[data-pagination-next]').disabled = currentPage >= totalPages);
@@ -200,7 +189,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           <span>Total</span>
           <span></span>
         </div>
-        ${visible.map((order) => `
+        ${orders.map((order) => `
           <article class="orders-row">
             <div>
               <strong>#${escapeHtml(order.number || order.id)}</strong>
@@ -225,32 +214,41 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       });
     };
 
-    const openOrderModal = (orderId) => {
-      const order = allOrders.find((item) => Number(item.id) === orderId);
-      if (!order || !modal || !modalBody || !modalTitle) return;
-      modalTitle.textContent = `Pedido #${order.number || order.id}`;
-      modalBody.innerHTML = `
-        <dl class="modal-data">
-          <div><dt>Estado</dt><dd>${escapeHtml(order.status_label || order.status || '')}</dd></div>
-          <div><dt>Total</dt><dd>${escapeHtml(order.total || '')}</dd></div>
-          <div><dt>Fecha</dt><dd>${order.created_at ? new Date(order.created_at).toLocaleString('es-ES') : ''}</dd></div>
-          <div><dt>Pago</dt><dd>${escapeHtml(order.payment_method_title || '')}</dd></div>
-          <div><dt>Cliente</dt><dd>${escapeHtml(order.billing?.name || '')}</dd></div>
-          <div><dt>Email</dt><dd>${escapeHtml(order.billing?.email || '')}</dd></div>
-          <div><dt>Direccion</dt><dd>${escapeHtml(order.billing?.address || '')}</dd></div>
-          <div><dt>Accion</dt><dd>${order.edit_url ? `<a href="${escapeHtml(order.edit_url)}" target="_blank" rel="noreferrer">Editar pedido en WordPress</a>` : ''}</dd></div>
-        </dl>
-        <div class="modal-items">
-          ${(order.items || []).map((item) => `
-            <article>
-              <strong>${escapeHtml(item.name)}</strong>
-              <span>${Number(item.quantity || 1)} x ${escapeHtml(item.total || '')}</span>
-            </article>
-          `).join('')}
-        </div>
-      `;
+    const openOrderModal = async (orderId) => {
+      if (!modal || !modalBody || !modalTitle) return;
+      const rowOrder = orders.find((item) => Number(item.id) === orderId);
+      modalTitle.textContent = rowOrder ? `Pedido #${rowOrder.number || rowOrder.id}` : 'Pedido';
+      modalBody.innerHTML = '<p class="notice">Cargando detalle...</p>';
       modalBackdrop.hidden = false;
       modal.showModal();
+
+      try {
+        const { data: orderPayload } = await cachedJson(`${salesOrdersUrl}/${orderId}`, { credentials: 'include' }, 10_000);
+        const order = orderPayload.data || {};
+        modalTitle.textContent = `Pedido #${order.number || order.id}`;
+        modalBody.innerHTML = `
+          <dl class="modal-data">
+            <div><dt>Estado</dt><dd>${escapeHtml(order.status_label || order.status || '')}</dd></div>
+            <div><dt>Total</dt><dd>${escapeHtml(order.total || '')}</dd></div>
+            <div><dt>Fecha</dt><dd>${order.created_at ? new Date(order.created_at).toLocaleString('es-ES') : ''}</dd></div>
+            <div><dt>Pago</dt><dd>${escapeHtml(order.payment_method_title || '')}</dd></div>
+            <div><dt>Cliente</dt><dd>${escapeHtml(order.billing?.name || '')}</dd></div>
+            <div><dt>Email</dt><dd>${escapeHtml(order.billing?.email || '')}</dd></div>
+            <div><dt>Direccion</dt><dd>${escapeHtml(order.billing?.address || '')}</dd></div>
+            <div><dt>Accion</dt><dd>${order.edit_url ? `<a href="${escapeHtml(order.edit_url)}" target="_blank" rel="noreferrer">Editar pedido en WordPress</a>` : ''}</dd></div>
+          </dl>
+          <div class="modal-items">
+            ${(order.items || []).map((item) => `
+              <article>
+                <strong>${escapeHtml(item.name)}</strong>
+                <span>${Number(item.quantity || 1)} x ${escapeHtml(item.total || '')}</span>
+              </article>
+            `).join('')}
+          </div>
+        `;
+      } catch (error) {
+        modalBody.innerHTML = `<p class="notice">${escapeHtml(error instanceof Error ? error.message : 'No se pudo cargar el pedido.')}</p>`;
+      }
     };
 
     const closeModal = () => {
@@ -260,20 +258,22 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
     ordersSearch?.addEventListener('submit', (event) => event.preventDefault());
     ordersQuery?.addEventListener('input', () => {
-      const query = ordersQuery.value.trim().toLowerCase();
-      filteredOrders = query ? allOrders.filter((order) => orderSearchText(order).includes(query)) : allOrders;
-      currentPage = 1;
-      renderOrdersTable();
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => loadOrders(1).catch((error) => {
+        if (salesStatus) salesStatus.textContent = error instanceof Error ? error.message : 'No se pudieron cargar los pedidos.';
+      }), 350);
     });
 
     pagination?.querySelector('[data-pagination-prev]')?.addEventListener('click', () => {
-      currentPage = Math.max(1, currentPage - 1);
-      renderOrdersTable();
+      loadOrders(Math.max(1, currentPage - 1)).catch((error) => {
+        if (salesStatus) salesStatus.textContent = error instanceof Error ? error.message : 'No se pudieron cargar los pedidos.';
+      });
     });
 
     pagination?.querySelector('[data-pagination-next]')?.addEventListener('click', () => {
-      currentPage += 1;
-      renderOrdersTable();
+      loadOrders(Math.min(totalPages, currentPage + 1)).catch((error) => {
+        if (salesStatus) salesStatus.textContent = error instanceof Error ? error.message : 'No se pudieron cargar los pedidos.';
+      });
     });
 
     modalClose?.addEventListener('click', closeModal);
@@ -294,11 +294,26 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       renderSales(salesPayload.data || {});
     };
 
+    const buildOrdersUrl = (pageNumber = currentPage) => {
+      const url = new URL(salesOrdersUrl);
+      url.searchParams.set('page', String(pageNumber));
+      url.searchParams.set('per_page', String(perPage));
+      if (dateFrom?.value) url.searchParams.set('date_from', dateFrom.value);
+      if (dateTo?.value) url.searchParams.set('date_to', dateTo.value);
+      if (ordersQuery?.value.trim()) url.searchParams.set('search', ordersQuery.value.trim());
+      return url;
+    };
+
+    const loadOrders = async (pageNumber = currentPage) => {
+      const { data: payload } = await cachedJson(buildOrdersUrl(pageNumber).toString(), { credentials: 'include' }, 10_000);
+      renderOrdersTable(payload.data || [], payload.meta || {});
+    };
+
     const csvEscape = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
     const downloadCsv = () => {
       const rows = [
         ['Pedido', 'Fecha', 'Cliente', 'Email', 'Estado', 'Total', 'Pago'],
-        ...filteredOrders.map((order) => [
+        ...orders.map((order) => [
           order.number || order.id,
           order.created_at ? new Date(order.created_at).toLocaleString('es-ES') : '',
           order.billing?.name || '',
@@ -323,6 +338,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       try {
         if (salesStatus) salesStatus.textContent = 'Cargando ventas...';
         await loadSales();
+        await loadOrders(1);
         if (salesStatus) salesStatus.textContent = '';
       } catch (error) {
         if (salesStatus) salesStatus.textContent = error instanceof Error ? error.message : 'No se pudieron cargar las ventas.';
@@ -334,7 +350,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     cachedJson(meUrl, { credentials: 'include' }, 15_000)
       .then(async ({ data: payload }) => {
         if (!payload.data?.can_access_backoffice) throw new Error('Sin permisos.');
-        await loadSales();
+        await Promise.all([loadSales(), loadOrders(1)]);
         if (loading) loading.hidden = true;
         if (page) page.hidden = false;
       })

@@ -105,7 +105,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
   }
 
   <script>
-    import { shopApi, formatStorePrice, formatStorePriceHtml, type StoreProduct } from '../../lib/shop';
+    import { addStoreFields, shopApi, formatStorePrice, formatStorePriceHtml, storeCategoryFields, type StoreProduct } from '../../lib/shop';
     import { getProductBadgesHtml } from '../../lib/product-badges';
     import { addCartItem } from '../../lib/cart';
     import { cachedJson } from '../../lib/fetch-cache';
@@ -416,7 +416,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
     const _loadCategories = async (): Promise<void> => {
       try {
-        const url = `${shopApi.categories}?per_page=50&orderby=name&order=asc`;
+        const url = addStoreFields(`${shopApi.categories}?per_page=50&orderby=name&order=asc`, storeCategoryFields);
         const result = await cachedJson<Array<{ slug: string; name: string; count: number }>>(url, {}, 600_000);
         const cats = result.data;
         if (!filterCategory) return;

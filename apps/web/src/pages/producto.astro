@@ -79,7 +79,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     import { addCartItem } from '../lib/cart';
     import { cachedJson } from '../lib/fetch-cache';
     import { addWishlistItem, readWishlistIds, removeWishlistItem } from '../lib/wishlist';
-    import { formatStorePrice, formatStorePriceHtml, shopApi, type StoreProduct } from '../lib/shop';
+    import { addStoreFields, formatStorePrice, formatStorePriceHtml, shopApi, type StoreProduct } from '../lib/shop';
     import { getProductBadgesHtml } from '../lib/product-badges';
 
     const skeleton         = document.querySelector<HTMLElement>('#product-skeleton');
@@ -262,7 +262,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
       try {
         if (addButton) { addButton.disabled = true; addButton.textContent = 'Cargando…'; }
-        const result = await cachedJson<StoreProduct>(`${shopApi.products}/${varId}`, { signal: _abortVariation.signal }, 120_000);
+        const result = await cachedJson<StoreProduct>(addStoreFields(`${shopApi.products}/${varId}`), { signal: _abortVariation.signal }, 120_000);
         const variation = result.data;
 
         currentPrice       = formatStorePrice(variation.prices);
@@ -405,7 +405,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         url.searchParams.set('exclude', String(p.id));
         url.searchParams.set('per_page', '4');
         url.searchParams.set('orderby', 'popularity');
-        const result = await cachedJson<StoreProduct[]>(url.toString(), {}, 60_000);
+        const result = await cachedJson<StoreProduct[]>(addStoreFields(url), {}, 60_000);
         const related = result.data;
         if (!related.length) return;
         relatedGrid.innerHTML = related.map(_relatedCardHtml).join('');
@@ -419,16 +419,25 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const _loadProduct = async (): Promise<void> => {
       if (!slug) { _setStatus('Producto no encontrado.', 'error'); return; }
       try {
-        const result = await cachedJson<StoreProduct[]>(`${shopApi.products}?slug=${encodeURIComponent(slug)}`, {}, 120_000);
-        const list = result.data;
-        let product = list[0] ?? null;
+        let product: StoreProduct | null = null;
+        try {
+          const result = await cachedJson<StoreProduct>(addStoreFields(`${shopApi.products}/${encodeURIComponent(slug)}`), {}, 120_000);
+          product = result.data ?? null;
+        } catch {
+          const fallback = await cachedJson<StoreProduct[]>(
+            addStoreFields(`${shopApi.products}?slug=${encodeURIComponent(slug)}`),
+            {},
+            120_000,
+          );
+          product = fallback.data?.[0] ?? null;
+        }
         if (!product) { _setStatus('Producto no encontrado.', 'error'); return; }
 
-        // El endpoint de listado (?slug=) puede devolver atributos incompletos
-        // para productos variables. Refetching por ID garantiza datos completos.
+        // En algunos setups el endpoint por slug puede devolver atributos incompletos
+        // para productos variables. Refetching por ID deja la ficha consistente.
         if (product.type === 'variable') {
           try {
-            const detail = await cachedJson<StoreProduct>(`${shopApi.products}/${product.id}`, {}, 120_000);
+            const detail = await cachedJson<StoreProduct>(addStoreFields(`${shopApi.products}/${product.id}`), {}, 120_000);
             product = detail.data;
           } catch { /* usar datos del listado si falla */ }
         }

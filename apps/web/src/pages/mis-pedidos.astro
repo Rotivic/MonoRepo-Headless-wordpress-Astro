@@ -97,7 +97,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           <div>
             <strong>Pedido #${escapeHtml(order.number || order.id)}</strong>
             <p>${formatDate(order.created_at)}</p>
-            <small>${escapeHtml(order.status_help || '')}</small>
+            <small>${escapeHtml(order.status_help || 'Detalle disponible al abrir el pedido.')}</small>
           </div>
           <span>${Number(order.item_count || 0)} producto(s)</span>
           <span class="order-total">${escapeHtml(order.total || '')}</span>
