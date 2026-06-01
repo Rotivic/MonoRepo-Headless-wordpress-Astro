@@ -20,6 +20,11 @@ const wpAdminUrl = siteConfig.apiUrl.replace(/\/wp-json\/?$/, '/wp/wp-admin/');
 
       <section class="admin-panel" id="admin-panel" data-state="loading">
         <p id="admin-status">Comprobando permisos...</p>
+        <div class="pending-panel" id="pending-panel" hidden>
+          <article><span>Pedidos en espera</span><strong id="pending-orders">-</strong></article>
+          <article><span>Bajo stock</span><strong id="pending-low-stock">-</strong></article>
+          <article><span>Sin stock</span><strong id="pending-out-stock">-</strong></article>
+        </div>
         <div class="admin-grid" id="admin-grid" hidden>
           <a class="admin-only" href={`${wpAdminUrl}`}>WordPress admin</a>
           <a class="admin-only" href="/usuarios">Listado de usuarios</a>
@@ -35,10 +40,29 @@ const wpAdminUrl = siteConfig.apiUrl.replace(/\/wp-json\/?$/, '/wp/wp-admin/');
     </section>
   </main>
 
-  <script define:vars={{ meUrl: tcgApi.me }}>
+  <script define:vars={{ meUrl: tcgApi.me, salesUrl: tcgApi.adminSales, inventoryUrl: tcgApi.adminInventory }}>
     const panel = document.querySelector('#admin-panel');
     const status = document.querySelector('#admin-status');
     const grid = document.querySelector('#admin-grid');
+    const pendingPanel = document.querySelector('#pending-panel');
+    const pendingOrders = document.querySelector('#pending-orders');
+    const pendingLowStock = document.querySelector('#pending-low-stock');
+    const pendingOutStock = document.querySelector('#pending-out-stock');
+
+    const loadPending = async () => {
+      try {
+        const [salesResponse, inventoryResponse] = await Promise.all([
+          fetch(salesUrl, { credentials: 'include' }),
+          fetch(`${inventoryUrl}?per_page=5`, { credentials: 'include' }),
+        ]);
+        const sales = await salesResponse.json();
+        const inventory = await inventoryResponse.json();
+        if (pendingOrders) pendingOrders.textContent = String(sales.data?.metrics?.pending ?? 0);
+        if (pendingLowStock) pendingLowStock.textContent = String(inventory.alerts?.low_stock?.length ?? 0);
+        if (pendingOutStock) pendingOutStock.textContent = String(inventory.alerts?.out_of_stock?.length ?? 0);
+        if (pendingPanel) pendingPanel.hidden = false;
+      } catch {}
+    };
 
     fetch(meUrl, { credentials: 'include' })
       .then(async (response) => {
@@ -53,6 +77,7 @@ const wpAdminUrl = siteConfig.apiUrl.replace(/\/wp-json\/?$/, '/wp/wp-admin/');
         if (!payload.data?.is_admin) {
           grid.querySelectorAll('.admin-only').forEach((item) => { item.hidden = true; });
         }
+        loadPending();
       })
       .catch((error) => {
         panel.dataset.state = 'error';
@@ -112,6 +137,33 @@ const wpAdminUrl = siteConfig.apiUrl.replace(/\/wp-json\/?$/, '/wp/wp-admin/');
     margin-top: 16px;
   }
 
+  .pending-panel {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 16px;
+  }
+
+  .pending-panel article {
+    display: grid;
+    gap: 5px;
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-item);
+    background: var(--color-surface-soft);
+    padding: 12px;
+  }
+
+  .pending-panel span {
+    color: var(--color-body);
+    font-size: 0.78rem;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  .pending-panel strong {
+    font-size: 1.45rem;
+  }
+
   .admin-grid a {
     border: 1px solid var(--color-hairline);
     border-radius: var(--radius-item);
@@ -120,7 +172,8 @@ const wpAdminUrl = siteConfig.apiUrl.replace(/\/wp-json\/?$/, '/wp/wp-admin/');
   }
 
   @media (max-width: 860px) {
-    .admin-shell {
+    .admin-shell,
+    .pending-panel {
       grid-template-columns: 1fr;
     }
   }

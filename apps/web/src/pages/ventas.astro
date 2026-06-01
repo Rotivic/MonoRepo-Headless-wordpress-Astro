@@ -52,8 +52,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             <div class="chart-card">
               <div class="chart-head">
                 <h2>Ventas reales</h2>
-                <span>Ultimos 30 dias</span>
+                <span id="sales-range-label">Rango seleccionado</span>
               </div>
+              <form class="date-range" id="sales-range">
+                <input id="date-from" type="date" />
+                <input id="date-to" type="date" />
+                <button class="button button-secondary" type="submit">Aplicar</button>
+                <button class="button button-secondary" id="export-csv" type="button">Export CSV</button>
+              </form>
               <div class="chart" id="sales-chart" aria-label="Grafica de ventas semanales"></div>
             </div>
             <div class="orders-table-card">
@@ -108,10 +114,22 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const modalTitle = document.querySelector('#modal-title');
     const modalBody = document.querySelector('#modal-body');
     const modalClose = document.querySelector('#modal-close');
+    const rangeForm = document.querySelector('#sales-range');
+    const dateFrom = document.querySelector('#date-from');
+    const dateTo = document.querySelector('#date-to');
+    const exportCsv = document.querySelector('#export-csv');
+    const rangeLabel = document.querySelector('#sales-range-label');
     let allOrders = [];
     let filteredOrders = [];
     let currentPage = 1;
     const perPage = 8;
+
+    const isoDate = (date) => date.toISOString().slice(0, 10);
+    const today = new Date();
+    const previous = new Date();
+    previous.setDate(today.getDate() - 29);
+    if (dateFrom) dateFrom.value = isoDate(previous);
+    if (dateTo) dateTo.value = isoDate(today);
 
     const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, (char) => ({
       '&': '&amp;',
@@ -133,7 +151,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           <div class="chart-scale">
             ${marks.map((mark) => `<span>${Math.round((max * mark) / 100)}</span>`).join('')}
           </div>
-          <div class="chart-bars">
+          <div class="chart-bars" style="--days: ${(data.chart || []).length || 30}">
             ${(data.chart || []).map((item, index, items) => {
           const value = Math.max(8, Math.round((Number(item.total || 0) / max) * 100));
               const showLabel = index === 0 || index === items.length - 1 || index % 5 === 0;
@@ -145,6 +163,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
       allOrders = data.orders || [];
       filteredOrders = allOrders;
+      if (rangeLabel) rangeLabel.textContent = `${data.range?.from || dateFrom?.value || ''} - ${data.range?.to || dateTo?.value || ''}`;
       renderOrdersTable();
     };
 
@@ -191,7 +210,10 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             </div>
             <span class="status-pill">${escapeHtml(order.status_label || order.status || '')}</span>
             <strong>${escapeHtml(order.total || '')}</strong>
-            <button class="button button-secondary order-detail" type="button" data-id="${Number(order.id)}">Ver</button>
+            <div class="row-actions">
+              <button class="button button-secondary order-detail" type="button" data-id="${Number(order.id)}">Ver</button>
+              ${order.edit_url ? `<a class="button button-secondary" href="${escapeHtml(order.edit_url)}" target="_blank" rel="noreferrer">WP</a>` : ''}
+            </div>
           </article>
         `).join('') || '<p class="notice">No hay pedidos para mostrar.</p>'}
       `;
@@ -214,6 +236,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           <div><dt>Cliente</dt><dd>${escapeHtml(order.billing?.name || '')}</dd></div>
           <div><dt>Email</dt><dd>${escapeHtml(order.billing?.email || '')}</dd></div>
           <div><dt>Direccion</dt><dd>${escapeHtml(order.billing?.address || '')}</dd></div>
+          <div><dt>Accion</dt><dd>${order.edit_url ? `<a href="${escapeHtml(order.edit_url)}" target="_blank" rel="noreferrer">Editar pedido en WordPress</a>` : ''}</dd></div>
         </dl>
         <div class="modal-items">
           ${(order.items || []).map((item) => `
@@ -257,15 +280,63 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       if (modalBackdrop) modalBackdrop.hidden = true;
     });
 
+    const buildSalesUrl = () => {
+      const url = new URL(salesUrl);
+      if (dateFrom?.value) url.searchParams.set('date_from', dateFrom.value);
+      if (dateTo?.value) url.searchParams.set('date_to', dateTo.value);
+      return url;
+    };
+
+    const loadSales = async () => {
+      const salesResponse = await fetch(buildSalesUrl(), { credentials: 'include' });
+      const salesPayload = await salesResponse.json();
+      if (!salesResponse.ok) throw new Error(salesPayload.message || 'No se pudieron cargar las ventas.');
+      renderSales(salesPayload.data || {});
+    };
+
+    const csvEscape = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+    const downloadCsv = () => {
+      const rows = [
+        ['Pedido', 'Fecha', 'Cliente', 'Email', 'Estado', 'Total', 'Pago'],
+        ...filteredOrders.map((order) => [
+          order.number || order.id,
+          order.created_at ? new Date(order.created_at).toLocaleString('es-ES') : '',
+          order.billing?.name || '',
+          order.billing?.email || '',
+          order.status_label || order.status || '',
+          order.total || '',
+          order.payment_method_title || '',
+        ]),
+      ];
+      const csv = rows.map((row) => row.map(csvEscape).join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `ventas-${dateFrom?.value || 'inicio'}-${dateTo?.value || 'hoy'}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    };
+
+    rangeForm?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      try {
+        if (salesStatus) salesStatus.textContent = 'Cargando ventas...';
+        await loadSales();
+        if (salesStatus) salesStatus.textContent = '';
+      } catch (error) {
+        if (salesStatus) salesStatus.textContent = error instanceof Error ? error.message : 'No se pudieron cargar las ventas.';
+      }
+    });
+
+    exportCsv?.addEventListener('click', downloadCsv);
+
     fetch(meUrl, { credentials: 'include' })
       .then(async (response) => {
         if (!response.ok) throw new Error('Debes iniciar sesion.');
         const payload = await response.json();
         if (!payload.data?.can_access_backoffice) throw new Error('Sin permisos.');
-        const salesResponse = await fetch(salesUrl, { credentials: 'include' });
-        const salesPayload = await salesResponse.json();
-        if (!salesResponse.ok) throw new Error(salesPayload.message || 'No se pudieron cargar las ventas.');
-        renderSales(salesPayload.data || {});
+        await loadSales();
         if (loading) loading.hidden = true;
         if (page) page.hidden = false;
       })
@@ -436,6 +507,12 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     white-space: nowrap;
   }
 
+  :global(.row-actions) {
+    display: inline-flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+
   .chart-head {
     display: flex;
     align-items: center;
@@ -461,6 +538,21 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     padding-top: 8px;
   }
 
+  .date-range {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) auto auto;
+    gap: 10px;
+  }
+
+  .date-range input {
+    width: 100%;
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-input);
+    background: var(--color-canvas);
+    padding: 10px 12px;
+    font: inherit;
+  }
+
   :global(.chart-scale) {
     display: grid;
     grid-template-rows: repeat(5, 1fr);
@@ -474,7 +566,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   :global(.chart-bars) {
     position: relative;
     display: grid;
-    grid-template-columns: repeat(30, minmax(4px, 1fr));
+    grid-template-columns: repeat(var(--days, 30), minmax(4px, 1fr));
     gap: 4px;
     align-items: end;
     border-bottom: 1px solid var(--color-hairline);
@@ -600,7 +692,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
   @media (max-width: 860px) {
     .sales-shell,
-    .sales-panel {
+    .sales-panel,
+    .date-range {
       grid-template-columns: 1fr;
     }
 

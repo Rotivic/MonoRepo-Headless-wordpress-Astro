@@ -33,6 +33,12 @@ final class TCG_Platform_API_Orders
             'callback' => [self::class, 'sales'],
             'permission_callback' => ['TCG_Platform_API', 'require_auth'],
         ]);
+
+        register_rest_route($namespace, '/admin/inventory', [
+            'methods' => WP_REST_Server::READABLE,
+            'callback' => [self::class, 'inventory'],
+            'permission_callback' => ['TCG_Platform_API', 'require_auth'],
+        ]);
     }
 
     public static function user_orders(): WP_REST_Response|WP_Error
@@ -123,7 +129,7 @@ final class TCG_Platform_API_Orders
         ], $errors ? 207 : 201);
     }
 
-    public static function sales(): WP_REST_Response|WP_Error
+    public static function sales(WP_REST_Request $request): WP_REST_Response|WP_Error
     {
         if (! self::can_access_sales()) {
             return self::error('tcg_sales_forbidden', 'Backoffice permissions are required.', 403);
@@ -133,16 +139,21 @@ final class TCG_Platform_API_Orders
             return self::error('tcg_sales_woocommerce_missing', 'WooCommerce is not available.', 503);
         }
 
+        $date_from = sanitize_text_field((string) $request->get_param('date_from'));
+        $date_to = sanitize_text_field((string) $request->get_param('date_to'));
+        $date_query = self::date_query($date_from, $date_to);
+
         $orders = wc_get_orders([
             'limit' => 250,
             'orderby' => 'date',
             'order' => 'DESC',
             'status' => array_keys(wc_get_order_statuses()),
+            ...($date_query ? ['date_created' => $date_query] : []),
         ]);
 
         $total = 0.0;
         $pending = 0;
-        $chart = self::empty_chart();
+        $chart = self::empty_chart($date_from, $date_to);
 
         foreach ($orders as $order) {
             if (! $order instanceof WC_Order) {
@@ -176,7 +187,73 @@ final class TCG_Platform_API_Orders
                 ],
                 'chart' => array_values($chart),
                 'orders' => array_values(array_map([self::class, 'order_payload'], $orders)),
+                'range' => [
+                    'from' => $date_from,
+                    'to' => $date_to,
+                ],
             ],
+        ]);
+    }
+
+    public static function inventory(WP_REST_Request $request): WP_REST_Response|WP_Error
+    {
+        if (! self::can_access_sales()) {
+            return self::error('tcg_inventory_forbidden', 'Backoffice permissions are required.', 403);
+        }
+
+        if (! function_exists('wc_get_products')) {
+            return self::error('tcg_inventory_woocommerce_missing', 'WooCommerce is not available.', 503);
+        }
+
+        $page = max(1, absint($request->get_param('page') ?: 1));
+        $per_page = min(50, max(5, absint($request->get_param('per_page') ?: 10)));
+        $search = sanitize_text_field((string) $request->get_param('search'));
+        $stock = sanitize_key((string) $request->get_param('stock'));
+        $type = sanitize_key((string) $request->get_param('type'));
+        $category = sanitize_text_field((string) $request->get_param('category'));
+
+        $args = [
+            'limit' => $per_page,
+            'page' => $page,
+            'paginate' => true,
+            'orderby' => 'date',
+            'order' => 'DESC',
+            'status' => ['publish'],
+            'return' => 'objects',
+        ];
+
+        if ($search !== '') {
+            $args['s'] = $search;
+        }
+
+        if (in_array($stock, ['instock', 'outofstock', 'onbackorder'], true)) {
+            $args['stock_status'] = $stock;
+        }
+
+        if ($type !== '') {
+            $args['type'] = $type;
+        }
+
+        if ($category !== '') {
+            $args['category'] = [$category];
+        }
+
+        $result = wc_get_products($args);
+        $products = is_object($result) && isset($result->products) ? $result->products : [];
+        $total = is_object($result) && isset($result->total) ? (int) $result->total : count($products);
+        $total_pages = is_object($result) && isset($result->max_num_pages) ? (int) $result->max_num_pages : 1;
+
+        $alerts = self::inventory_alerts();
+
+        return new WP_REST_Response([
+            'data' => array_values(array_map([self::class, 'product_payload'], $products)),
+            'meta' => [
+                'page' => $page,
+                'per_page' => $per_page,
+                'total' => $total,
+                'total_pages' => $total_pages,
+            ],
+            'alerts' => $alerts,
         ]);
     }
 
@@ -204,6 +281,7 @@ final class TCG_Platform_API_Orders
             'receipt_available' => false,
             'support_available' => true,
             'cancellation_available' => in_array($status, ['pending', 'on-hold'], true),
+            'edit_url' => admin_url('admin.php?page=wc-orders&action=edit&id=' . $order->get_id()),
             'billing' => [
                 'name' => trim($order->get_billing_first_name() . ' ' . $order->get_billing_last_name()),
                 'email' => $order->get_billing_email(),
@@ -297,11 +375,22 @@ final class TCG_Platform_API_Orders
         ];
     }
 
-    private static function empty_chart(): array
+    private static function empty_chart(string $date_from = '', string $date_to = ''): array
     {
         $chart = [];
-        for ($index = 29; $index >= 0; $index--) {
-            $time = strtotime("-{$index} days");
+
+        $end = $date_to !== '' ? strtotime($date_to) : time();
+        $start = $date_from !== '' ? strtotime($date_from) : strtotime('-29 days', $end ?: time());
+
+        if (! $start || ! $end || $start > $end) {
+            $end = time();
+            $start = strtotime('-29 days', $end);
+        }
+
+        $days = min(60, max(1, (int) floor(($end - $start) / DAY_IN_SECONDS) + 1));
+
+        for ($index = 0; $index < $days; $index++) {
+            $time = strtotime("+{$index} days", $start);
             $key = gmdate('Y-m-d', $time);
             $chart[$key] = [
                 'date' => $key,
@@ -312,6 +401,120 @@ final class TCG_Platform_API_Orders
         }
 
         return $chart;
+    }
+
+    private static function date_query(string $date_from, string $date_to): string
+    {
+        if ($date_from === '' && $date_to === '') {
+            return '';
+        }
+
+        $from = $date_from !== '' ? $date_from . ' 00:00:00' : '1970-01-01 00:00:00';
+        $to = $date_to !== '' ? $date_to . ' 23:59:59' : gmdate('Y-m-d 23:59:59');
+
+        return $from . '...' . $to;
+    }
+
+    private static function product_payload(WC_Product $product): array
+    {
+        $image_id = $product->get_image_id();
+        $stock_quantity = $product->managing_stock() ? $product->get_stock_quantity() : null;
+        $variation_stock = null;
+
+        if ($product instanceof WC_Product_Variable) {
+            $variation_stock = self::variation_stock_summary($product);
+            $stock_quantity = $variation_stock['total_managed_stock'];
+        }
+
+        $low_stock_amount = (int) get_post_meta($product->get_id(), '_low_stock_amount', true);
+        $low_stock_amount = $low_stock_amount > 0 ? $low_stock_amount : 3;
+        $is_low = $stock_quantity !== null && $stock_quantity > 0 && (int) $stock_quantity <= $low_stock_amount;
+
+        return [
+            'id' => $product->get_id(),
+            'name' => $product->get_name(),
+            'slug' => $product->get_slug(),
+            'type' => $product->get_type(),
+            'sku' => $product->get_sku(),
+            'price' => self::money((float) $product->get_price()),
+            'stock_status' => $product->get_stock_status(),
+            'is_in_stock' => $product->is_in_stock(),
+            'stock_quantity' => $stock_quantity,
+            'variation_stock' => $variation_stock,
+            'low_stock' => $is_low,
+            'image' => $image_id ? wp_get_attachment_image_url($image_id, 'woocommerce_thumbnail') : '',
+            'edit_url' => admin_url('post.php?post=' . $product->get_id() . '&action=edit'),
+            'permalink' => get_permalink($product->get_id()),
+        ];
+    }
+
+    private static function variation_stock_summary(WC_Product_Variable $product): array
+    {
+        $total = 0;
+        $managed = 0;
+        $available = 0;
+        $out = 0;
+
+        foreach ($product->get_children() as $variation_id) {
+            $variation = wc_get_product((int) $variation_id);
+            if (! $variation instanceof WC_Product) {
+                continue;
+            }
+
+            if ($variation->is_in_stock()) {
+                $available++;
+            } else {
+                $out++;
+            }
+
+            if ($variation->managing_stock()) {
+                $stock = $variation->get_stock_quantity();
+                if ($stock !== null) {
+                    $managed++;
+                    $total += max(0, (int) $stock);
+                }
+            }
+        }
+
+        return [
+            'total_managed_stock' => $managed > 0 ? $total : null,
+            'available_variations' => $available,
+            'out_of_stock_variations' => $out,
+        ];
+    }
+
+    private static function inventory_alerts(): array
+    {
+        $low = [];
+        $empty = [];
+
+        $products = wc_get_products([
+            'limit' => 100,
+            'status' => ['publish'],
+            'return' => 'objects',
+        ]);
+
+        foreach ($products as $product) {
+            if (! $product instanceof WC_Product) {
+                continue;
+            }
+
+            $stock_quantity = $product->managing_stock() ? $product->get_stock_quantity() : null;
+
+            if (! $product->is_in_stock()) {
+                $empty[] = self::product_payload($product);
+                continue;
+            }
+
+            if ($stock_quantity !== null && (int) $stock_quantity <= 3) {
+                $low[] = self::product_payload($product);
+            }
+        }
+
+        return [
+            'low_stock' => array_slice($low, 0, 8),
+            'out_of_stock' => array_slice($empty, 0, 8),
+        ];
     }
 
     private static function can_access_sales(): bool

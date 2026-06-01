@@ -27,5 +27,6 @@ export const tcgApi = {
   order: (orderId: number | string) => `${siteConfig.apiUrl}/tcg/v1/orders/${orderId}`,
   orderRepeat: (orderId: number | string) => `${siteConfig.apiUrl}/tcg/v1/orders/${orderId}/repeat`,
   adminSales: `${siteConfig.apiUrl}/tcg/v1/admin/sales`,
+  adminInventory: `${siteConfig.apiUrl}/tcg/v1/admin/inventory`,
   adminUsers: `${siteConfig.apiUrl}/tcg/v1/admin/users`,
 };

@@ -2,7 +2,6 @@
 import BackButton from '../components/BackButton.astro';
 import ModuleDisabled from '../components/ModuleDisabled.astro';
 import SiteHeader from '../components/SiteHeader.astro';
-import Pagination from '../components/Pagination.astro';
 import { siteConfig } from '../config/site';
 import { tcgApi } from '../lib/tcg-api';
 import BaseLayout from '../layouts/BaseLayout.astro';
@@ -39,8 +38,29 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
           <section class="inventory-panel">
             <p class="notice" id="inventory-status" hidden></p>
+            <form class="inventory-filters" id="inventory-filters">
+              <input id="inventory-search" type="search" placeholder="Buscar por nombre o SKU" autocomplete="off" />
+              <select id="inventory-stock">
+                <option value="">Todo el stock</option>
+                <option value="instock">En stock</option>
+                <option value="outofstock">Sin stock</option>
+                <option value="onbackorder">Reserva/backorder</option>
+              </select>
+              <select id="inventory-type">
+                <option value="">Todos los tipos</option>
+                <option value="simple">Simple</option>
+                <option value="variable">Variable</option>
+                <option value="variation">Variacion</option>
+              </select>
+              <button class="button button-secondary" id="inventory-clear" type="button">Limpiar</button>
+            </form>
+            <div class="alert-grid" id="inventory-alerts"></div>
             <div class="table" id="inventory-table"></div>
-            <Pagination id="inventory-pagination" label="Paginacion de inventario" />
+            <nav class="inventory-pagination" id="inventory-pagination" aria-label="Paginacion de inventario">
+              <button class="button button-secondary" data-prev type="button">Anterior</button>
+              <span data-status>Pagina 1 de 1</span>
+              <button class="button button-secondary" data-next type="button">Siguiente</button>
+            </nav>
           </section>
         </section>
       </main>
@@ -53,16 +73,24 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   }
 
   <script>
-    import { setupLocalPagination } from '../lib/pagination';
-    import { formatStorePrice, shopApi } from '../lib/shop';
     import { tcgApi } from '../lib/tcg-api';
 
     const meUrl = tcgApi.me;
+    const inventoryUrl = tcgApi.adminInventory;
     const page = document.querySelector('#backoffice-page');
     const loading = document.querySelector('#inventory-loading');
     const status = document.querySelector('#inventory-status');
     const table = document.querySelector('#inventory-table');
     const pagination = document.querySelector('#inventory-pagination');
+    const filters = document.querySelector('#inventory-filters');
+    const searchInput = document.querySelector('#inventory-search');
+    const stockSelect = document.querySelector('#inventory-stock');
+    const typeSelect = document.querySelector('#inventory-type');
+    const clearButton = document.querySelector('#inventory-clear');
+    const alertsRoot = document.querySelector('#inventory-alerts');
+    let currentPage = 1;
+    let totalPages = 1;
+    let debounceTimer = null;
 
     const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, (char) => ({
       '&': '&amp;',
@@ -79,77 +107,140 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       status.hidden = !message;
     };
 
-    const renderProducts = (products) => {
+    const renderAlerts = (alerts) => {
+      if (!alertsRoot) return;
+      const low = alerts?.low_stock || [];
+      const empty = alerts?.out_of_stock || [];
+      alertsRoot.innerHTML = `
+        <article>
+          <span>Bajo stock</span>
+          <strong>${low.length}</strong>
+          <small>${low.slice(0, 3).map((item) => escapeHtml(item.name)).join(', ') || 'Sin alertas'}</small>
+        </article>
+        <article>
+          <span>Sin stock</span>
+          <strong>${empty.length}</strong>
+          <small>${empty.slice(0, 3).map((item) => escapeHtml(item.name)).join(', ') || 'Sin alertas'}</small>
+        </article>
+      `;
+    };
+
+    const renderPagination = (meta) => {
+      currentPage = Number(meta?.page || currentPage);
+      totalPages = Math.max(1, Number(meta?.total_pages || 1));
+      const statusEl = pagination?.querySelector('[data-status]');
+      const prev = pagination?.querySelector('[data-prev]');
+      const next = pagination?.querySelector('[data-next]');
+      if (statusEl) statusEl.textContent = `Pagina ${currentPage} de ${totalPages} · ${Number(meta?.total || 0)} productos`;
+      if (prev) prev.disabled = currentPage <= 1;
+      if (next) next.disabled = currentPage >= totalPages;
+      if (pagination) pagination.hidden = totalPages <= 1;
+    };
+
+    const renderProducts = (products, meta) => {
       if (!table) return;
 
       table.innerHTML = products.map((product) => {
-        const image = product.images?.[0];
         const name = escapeHtml(product.name);
         const slug = escapeHtml(product.slug);
-        const price = escapeHtml(formatStorePrice(product.prices));
-        const stockCount = Number(product.low_stock_remaining ?? product.stock_quantity);
+        const price = escapeHtml(product.price || '-');
+        const isVariable = product.type === 'variable';
+        const stockCount = Number(product.stock_quantity);
         const hasStockCount = Number.isFinite(stockCount) && stockCount >= 0;
-        const stockLabel = product.is_in_stock
-          ? hasStockCount ? `Quedan ${stockCount}` : 'Disponible'
-          : 'Sin stock';
-        const stockState = product.is_in_stock ? (hasStockCount && stockCount <= 3 ? 'low' : 'available') : 'empty';
+        const variationStock = product.variation_stock || null;
+        const stockLabel = isVariable
+          ? product.is_in_stock
+            ? variationStock?.total_managed_stock !== null && variationStock?.total_managed_stock !== undefined
+              ? `Variaciones: ${variationStock.available_variations || 0} disponibles · ${variationStock.total_managed_stock} uds`
+              : `Variaciones: ${variationStock?.available_variations || 0} disponibles`
+            : 'Sin variaciones disponibles'
+          : product.is_in_stock
+            ? hasStockCount ? `Quedan ${stockCount}` : 'Disponible'
+            : 'Sin stock';
+        const stockState = product.is_in_stock ? (product.low_stock ? 'low' : 'available') : 'empty';
 
         return `
           <article class="row inventory-page-item">
             <div class="product-cell">
               <div class="product-thumb">
-                ${image?.src ? `<img src="${escapeHtml(image.src)}" alt="" loading="lazy">` : `<span aria-hidden="true">${name.slice(0, 1).toUpperCase()}</span>`}
+                ${product.image ? `<img src="${escapeHtml(product.image)}" alt="" loading="lazy">` : `<span aria-hidden="true">${name.slice(0, 1).toUpperCase()}</span>`}
               </div>
               <div class="product-meta">
                 <strong>${name}</strong>
-                <span>${slug}</span>
+                <span>${slug}${product.sku ? ` · SKU ${escapeHtml(product.sku)}` : ''}</span>
               </div>
             </div>
             <span class="price-pill">${price}</span>
             <span class="stock-pill" data-stock="${stockState}">${stockLabel}</span>
+            <a class="button button-secondary wp-edit-link" href="${escapeHtml(product.edit_url)}" target="_blank" rel="noreferrer">Editar</a>
           </article>
         `;
       }).join('');
 
       table.hidden = products.length === 0;
-      if (pagination) pagination.hidden = products.length <= 10;
       setStatus(products.length === 0 ? 'No hay productos para mostrar.' : '');
-
-      setupLocalPagination({
-        root: document,
-        itemSelector: '.inventory-page-item',
-        pagination,
-        perPage: 10,
-      }).refresh();
+      renderPagination(meta);
     };
 
-    const loadInventory = async () => {
+    const loadInventory = async (pageNumber = currentPage) => {
       const authResponse = await fetch(meUrl, { credentials: 'include' });
       if (!authResponse.ok) throw new Error('Debes iniciar sesion.');
 
-      const payload = await authResponse.json();
-      if (!payload.data?.can_access_backoffice) throw new Error('Sin permisos.');
+      const authPayload = await authResponse.json();
+      if (!authPayload.data?.can_access_backoffice) throw new Error('Sin permisos.');
 
-      const productsResponse = await fetch(`${shopApi.products}?per_page=50`);
+      const url = new URL(inventoryUrl);
+      url.searchParams.set('page', String(pageNumber));
+      url.searchParams.set('per_page', '10');
+      if (searchInput?.value.trim()) url.searchParams.set('search', searchInput.value.trim());
+      if (stockSelect?.value) url.searchParams.set('stock', stockSelect.value);
+      if (typeSelect?.value) url.searchParams.set('type', typeSelect.value);
+
+      const productsResponse = await fetch(url, { credentials: 'include' });
       if (!productsResponse.ok) throw new Error(`WooCommerce respondio con ${productsResponse.status}`);
+      const inventoryPayload = await productsResponse.json();
 
-      renderProducts(await productsResponse.json());
+      renderAlerts(inventoryPayload.alerts || {});
+      renderProducts(inventoryPayload.data || [], inventoryPayload.meta || {});
       if (loading) loading.hidden = true;
       if (page) page.hidden = false;
     };
 
+    const reloadFromFirstPage = () => {
+      currentPage = 1;
+      loadInventory(1).catch(showError);
+    };
+
+    const showError = (error) => {
+      if (loading) loading.hidden = true;
+      if (page) page.hidden = false;
+      if (table) table.hidden = true;
+      if (pagination) pagination.hidden = true;
+      if (error instanceof Error && (error.message === 'Debes iniciar sesion.' || error.message === 'Sin permisos.')) {
+        window.location.assign('/login');
+        return;
+      }
+      setStatus(error instanceof Error ? error.message : 'No se pudo cargar el inventario.', 'error');
+    };
+
+    filters?.addEventListener('submit', (event) => event.preventDefault());
+    searchInput?.addEventListener('input', () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(reloadFromFirstPage, 350);
+    });
+    stockSelect?.addEventListener('change', reloadFromFirstPage);
+    typeSelect?.addEventListener('change', reloadFromFirstPage);
+    clearButton?.addEventListener('click', () => {
+      if (searchInput) searchInput.value = '';
+      if (stockSelect) stockSelect.value = '';
+      if (typeSelect) typeSelect.value = '';
+      reloadFromFirstPage();
+    });
+    pagination?.querySelector('[data-prev]')?.addEventListener('click', () => loadInventory(Math.max(1, currentPage - 1)).catch(showError));
+    pagination?.querySelector('[data-next]')?.addEventListener('click', () => loadInventory(Math.min(totalPages, currentPage + 1)).catch(showError));
+
     loadInventory()
-      .catch((error) => {
-        if (loading) loading.hidden = true;
-        if (page) page.hidden = false;
-        if (table) table.hidden = true;
-        if (pagination) pagination.hidden = true;
-        if (error instanceof Error && (error.message === 'Debes iniciar sesion.' || error.message === 'Sin permisos.')) {
-          window.location.assign('/login');
-          return;
-        }
-        setStatus(error instanceof Error ? error.message : 'No se pudo cargar el inventario.', 'error');
-      });
+      .catch(showError);
   </script>
 </BaseLayout>
 
@@ -197,6 +288,55 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
   .notice[data-state="error"] {
     color: var(--color-danger);
+  }
+
+  .inventory-filters {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 150px 140px auto;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .inventory-filters input,
+  .inventory-filters select {
+    width: 100%;
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-input);
+    background: var(--color-canvas);
+    padding: 10px 12px;
+    font: inherit;
+  }
+
+  .alert-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .alert-grid article {
+    display: grid;
+    gap: 4px;
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-item);
+    background: var(--color-surface-soft);
+    padding: 12px;
+  }
+
+  .alert-grid span {
+    color: var(--color-body);
+    font-size: 0.8rem;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  .alert-grid strong {
+    font-size: 1.4rem;
+  }
+
+  .alert-grid small {
+    color: var(--color-body);
+    line-height: 1.5;
   }
 
   #inventory-loading[hidden],
@@ -251,7 +391,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
   :global(.row) {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
     gap: 14px;
     align-items: center;
     background: var(--color-canvas);
@@ -334,8 +474,29 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     color: var(--color-danger) !important;
   }
 
+  .inventory-pagination {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 14px;
+  }
+
+  .inventory-pagination span {
+    color: var(--color-body);
+    font-size: 0.9rem;
+    font-weight: 700;
+  }
+
+  :global(.wp-edit-link) {
+    white-space: nowrap;
+  }
+
   @media (max-width: 860px) {
     .inventory-shell,
+    .inventory-filters,
+    .alert-grid,
     :global(.row) {
       grid-template-columns: 1fr;
     }

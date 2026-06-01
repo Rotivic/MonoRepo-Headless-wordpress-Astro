@@ -493,7 +493,10 @@ DELETE /wp-json/tcg/v1/cart
 POST /wp-json/tcg/v1/cart/merge
 POST /wp-json/tcg/v1/checkout
 GET  /wp-json/tcg/v1/orders
+GET  /wp-json/tcg/v1/orders/{id}
+POST /wp-json/tcg/v1/orders/{id}/repeat
 GET  /wp-json/tcg/v1/admin/sales
+GET  /wp-json/tcg/v1/admin/inventory
 ```
 
 El 2FA usa TOTP compatible con aplicaciones autenticadoras. Al activarlo, la web muestra QR, secreto manual y codigos de recuperacion de un solo uso. Los codigos solo se muestran al activar y se guardan hasheados.
@@ -560,7 +563,7 @@ Rutas Astro iniciales para tienda:
 /usuarios
 ```
 
-Estas rutas son una base visual y funcional ligera. La tienda lee productos desde WooCommerce Store API, el producto usa `slug` por query string para no depender de rutas generadas en build, y el carrito guarda una seleccion local temporal solo para invitados. Al iniciar sesion o registrarse, el carrito invitado se fusiona contra `/wp-json/tcg/v1/cart/merge` y pasa a quedar vinculado a la cuenta. Wishlist requiere sesion y se persiste en WordPress mediante `/wp-json/tcg/v1/wishlist`. Checkout crea un pedido real de WooCommerce mediante `/wp-json/tcg/v1/checkout` usando el metodo local `tcg_local_test`, deja el pedido en estado `on-hold`, reduce stock y muestra la confirmacion con el pedido devuelto por WooCommerce. El checkout local recoge telefono, direccion completa, notas y metodo de entrega local/recogida; despues guarda esos datos en billing/shipping meta del usuario para precargar futuras compras. Mis pedidos consume `/wp-json/tcg/v1/orders`, permite abrir detalle solo lectura y repetir pedidos anteriores con validacion de stock; ventas consume `/wp-json/tcg/v1/admin/sales` con permisos backoffice.
+Estas rutas son una base visual y funcional ligera. La tienda lee productos desde WooCommerce Store API, el producto usa `slug` por query string para no depender de rutas generadas en build, y el carrito guarda una seleccion local temporal solo para invitados. Al iniciar sesion o registrarse, el carrito invitado se fusiona contra `/wp-json/tcg/v1/cart/merge` y pasa a quedar vinculado a la cuenta. Wishlist requiere sesion y se persiste en WordPress mediante `/wp-json/tcg/v1/wishlist`. Checkout crea un pedido real de WooCommerce mediante `/wp-json/tcg/v1/checkout` usando el metodo local `tcg_local_test`, deja el pedido en estado `on-hold`, reduce stock y muestra la confirmacion con el pedido devuelto por WooCommerce. El checkout local recoge telefono, direccion completa, notas y metodo de entrega local/recogida; despues guarda esos datos en billing/shipping meta del usuario para precargar futuras compras. Mis pedidos consume `/wp-json/tcg/v1/orders`, permite abrir detalle solo lectura y repetir pedidos anteriores con validacion de stock; ventas consume `/wp-json/tcg/v1/admin/sales` con rango de fechas y export CSV; inventario backoffice consume `/wp-json/tcg/v1/admin/inventory` con busqueda, filtros, paginacion real y alertas de stock.
 
 Regla de stock para el carrito persistente: el carrito representa intencion, no reserva inventario. La API valida disponibilidad/cantidad al guardar y vuelve a validar justo antes de crear pedido. En el checkout local de pruebas se reduce stock al crear el pedido WooCommerce; si mas adelante se usa reserva temporal o pasarela real, debe ocurrir en pedido pendiente/draft o durante checkout, no al anadir al carrito.
 
