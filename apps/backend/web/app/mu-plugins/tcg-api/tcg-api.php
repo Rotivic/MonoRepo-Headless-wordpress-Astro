@@ -993,6 +993,16 @@ final class TCG_Platform_API
             'avatar_url' => get_avatar_url($user->ID),
             'created_at' => mysql_to_rfc3339($user->user_registered),
             'two_factor_enabled' => self::is_two_factor_enabled((int) $user->ID),
+            'checkout' => [
+                'phone' => (string) get_user_meta($user->ID, 'billing_phone', true),
+                'address' => (string) get_user_meta($user->ID, 'billing_address_1', true),
+                'address_2' => (string) get_user_meta($user->ID, 'billing_address_2', true),
+                'postal_code' => (string) get_user_meta($user->ID, 'billing_postcode', true),
+                'city' => (string) get_user_meta($user->ID, 'billing_city', true),
+                'state' => (string) get_user_meta($user->ID, 'billing_state', true),
+                'country' => (string) (get_user_meta($user->ID, 'billing_country', true) ?: 'ES'),
+                'delivery_method' => (string) (get_user_meta($user->ID, 'tcg_delivery_method', true) ?: 'local_delivery'),
+            ],
         ];
     }
 

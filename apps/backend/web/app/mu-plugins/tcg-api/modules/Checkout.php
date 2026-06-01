@@ -34,6 +34,8 @@ final class TCG_Platform_API_Checkout
         }
 
         $billing = self::billing_from_request($request);
+        $delivery_method = self::delivery_method_from_request($request);
+        $customer_note = sanitize_textarea_field((string) $request->get_param('notes'));
         $order = wc_create_order(['customer_id' => get_current_user_id()]);
 
         if (! $order instanceof WC_Order) {
@@ -49,10 +51,16 @@ final class TCG_Platform_API_Checkout
 
         $order->set_address($billing, 'billing');
         $order->set_address($billing, 'shipping');
+        $order->set_customer_note($customer_note);
         $order->set_payment_method('tcg_local_test');
         $order->set_payment_method_title('Local test checkout');
         $order->set_created_via('tcg-platform-api');
+        $order->update_meta_data('_tcg_delivery_method', $delivery_method);
+        self::add_delivery_method($order, $delivery_method);
         $order->add_order_note('Pedido creado desde checkout local de pruebas TCG Platform.');
+        if ($customer_note !== '') {
+            $order->add_order_note('Nota del cliente: ' . $customer_note);
+        }
         $order->calculate_totals();
         $order->update_status('on-hold', 'Pedido local de pruebas creado sin pasarela externa.', true);
         $order->save();
@@ -62,6 +70,7 @@ final class TCG_Platform_API_Checkout
         }
 
         self::clear_cart();
+        self::persist_customer_checkout_data(get_current_user_id(), $billing, $delivery_method);
 
         return new WP_REST_Response([
             'data' => self::order_payload($order),
@@ -127,10 +136,39 @@ final class TCG_Platform_API_Checkout
             'last_name' => $last_name,
             'email' => $email,
             'address_1' => sanitize_text_field((string) $request->get_param('address')),
+            'address_2' => sanitize_text_field((string) $request->get_param('address_2')),
             'postcode' => sanitize_text_field((string) $request->get_param('postal_code')),
             'city' => sanitize_text_field((string) $request->get_param('city')),
+            'state' => sanitize_text_field((string) $request->get_param('state')),
             'country' => sanitize_text_field((string) ($request->get_param('country') ?: 'ES')),
+            'phone' => sanitize_text_field((string) $request->get_param('phone')),
         ];
+    }
+
+    private static function delivery_method_from_request(WP_REST_Request $request): string
+    {
+        $method = sanitize_key((string) $request->get_param('delivery_method'));
+
+        return in_array($method, ['local_delivery', 'local_pickup'], true) ? $method : 'local_delivery';
+    }
+
+    private static function add_delivery_method(WC_Order $order, string $delivery_method): void
+    {
+        $shipping = new WC_Order_Item_Shipping();
+        $shipping->set_method_id($delivery_method);
+        $shipping->set_method_title($delivery_method === 'local_pickup' ? 'Recogida local' : 'Entrega local de pruebas');
+        $shipping->set_total(0);
+        $order->add_item($shipping);
+    }
+
+    private static function persist_customer_checkout_data(int $user_id, array $billing, string $delivery_method): void
+    {
+        foreach ($billing as $key => $value) {
+            update_user_meta($user_id, 'billing_' . $key, $value);
+            update_user_meta($user_id, 'shipping_' . $key, $value);
+        }
+
+        update_user_meta($user_id, 'tcg_delivery_method', $delivery_method);
     }
 
     private static function clear_cart(): void
@@ -151,6 +189,8 @@ final class TCG_Platform_API_Checkout
             'currency' => $order->get_currency(),
             'payment_method' => $order->get_payment_method(),
             'payment_method_title' => $order->get_payment_method_title(),
+            'delivery_method' => (string) $order->get_meta('_tcg_delivery_method'),
+            'customer_note' => $order->get_customer_note(),
             'items' => array_values(array_map(static function (WC_Order_Item_Product $item): array {
                 return [
                     'product_id' => $item->get_product_id(),

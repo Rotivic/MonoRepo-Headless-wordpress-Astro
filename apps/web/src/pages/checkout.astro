@@ -32,6 +32,10 @@ import { tcgApi } from '../lib/tcg-api';
                 <label for="name">Nombre completo</label>
                 <input id="name" name="name" type="text" autocomplete="name" required />
               </div>
+              <div class="field">
+                <label for="phone">Telefono</label>
+                <input id="phone" name="phone" type="tel" autocomplete="tel" required />
+              </div>
             </section>
 
             <section class="block">
@@ -39,6 +43,10 @@ import { tcgApi } from '../lib/tcg-api';
               <div class="field">
                 <label for="address">Direccion</label>
                 <input id="address" name="address" type="text" autocomplete="street-address" required />
+              </div>
+              <div class="field">
+                <label for="address-2">Piso, puerta o referencia</label>
+                <input id="address-2" name="address_2" type="text" autocomplete="address-line2" />
               </div>
               <div class="field-grid">
                 <div class="field">
@@ -50,12 +58,55 @@ import { tcgApi } from '../lib/tcg-api';
                   <input id="city" name="city" type="text" autocomplete="address-level2" required />
                 </div>
               </div>
+              <div class="field-grid">
+                <div class="field">
+                  <label for="state">Provincia</label>
+                  <input id="state" name="state" type="text" autocomplete="address-level1" required />
+                </div>
+                <div class="field">
+                  <label for="country">Pais</label>
+                  <select id="country" name="country" autocomplete="country" required>
+                    <option value="ES">España</option>
+                    <option value="PT">Portugal</option>
+                    <option value="FR">Francia</option>
+                  </select>
+                </div>
+              </div>
+            </section>
+
+            <section class="block">
+              <h2>Entrega</h2>
+              <div class="delivery-options" role="radiogroup" aria-label="Metodo de entrega">
+                <label>
+                  <input type="radio" name="delivery_method" value="local_delivery" checked />
+                  <span>
+                    <strong>Entrega local</strong>
+                    <small>Sin coste en este entorno de pruebas.</small>
+                  </span>
+                </label>
+                <label>
+                  <input type="radio" name="delivery_method" value="local_pickup" />
+                  <span>
+                    <strong>Recogida local</strong>
+                    <small>El pedido queda preparado para recogida.</small>
+                  </span>
+                </label>
+              </div>
+              <div class="field">
+                <label for="notes">Notas del pedido</label>
+                <textarea id="notes" name="notes" rows="3" placeholder="Horario preferido, detalles de entrega o cualquier aclaracion"></textarea>
+              </div>
             </section>
 
             <section class="summary block">
               <h2>Resumen</h2>
               <div id="checkout-items"></div>
               <p id="checkout-empty" class="muted">No hay productos en el carrito.</p>
+              <div class="checkout-totals" id="checkout-totals" hidden>
+                <div><span>Subtotal</span><strong id="checkout-subtotal">0,00 €</strong></div>
+                <div><span>Entrega local</span><strong>0,00 €</strong></div>
+                <p>Impuestos, cupones y envio real se conectaran cuando WooCommerce tenga esa configuracion activa.</p>
+              </div>
             </section>
 
             <p class="status-message" id="checkout-status" aria-live="polite"></p>
@@ -83,8 +134,18 @@ import { tcgApi } from '../lib/tcg-api';
     const form = document.querySelector('#checkout-form');
     const status = document.querySelector('#checkout-status');
     const submit = document.querySelector('#checkout-submit');
+    const totalsRoot = document.querySelector('#checkout-totals');
+    const subtotalRoot = document.querySelector('#checkout-subtotal');
 
     let checkoutItems = [];
+
+    const formatMoney = (value) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(value);
+    const itemSubtotal = (item) => {
+      const raw = Number(item.line_subtotal_raw);
+      if (Number.isFinite(raw)) return raw;
+      const price = Number(item.price_raw);
+      return Number.isFinite(price) ? price * Number(item.quantity || 1) : 0;
+    };
 
     const redirectToLogin = () => {
       window.location.assign(`/login?next=${encodeURIComponent('/checkout')}`);
@@ -97,6 +158,8 @@ import { tcgApi } from '../lib/tcg-api';
           throw new Error('Guest');
         }
 
+        const payload = await response.json().catch(() => ({}));
+        prefillCheckout(payload.data || {});
         return true;
       } catch {
         try {
@@ -108,16 +171,41 @@ import { tcgApi } from '../lib/tcg-api';
       }
     };
 
+    const setValue = (name, value) => {
+      const field = form?.querySelector(`[name="${name}"]`);
+      if (!field || value === undefined || value === null || value === '') return;
+      field.value = value;
+    };
+
+    const prefillCheckout = (user) => {
+      const fullName = [user.first_name, user.last_name].filter(Boolean).join(' ') || user.display_name || '';
+      setValue('email', user.email || '');
+      setValue('name', fullName);
+      setValue('phone', user.checkout?.phone || '');
+      setValue('address', user.checkout?.address || '');
+      setValue('address_2', user.checkout?.address_2 || '');
+      setValue('postal_code', user.checkout?.postal_code || '');
+      setValue('city', user.checkout?.city || '');
+      setValue('state', user.checkout?.state || '');
+      setValue('country', user.checkout?.country || 'ES');
+
+      const delivery = user.checkout?.delivery_method || 'local_delivery';
+      const deliveryInput = form?.querySelector(`[name="delivery_method"][value="${delivery}"]`);
+      if (deliveryInput) deliveryInput.checked = true;
+    };
+
     const render = (items = checkoutItems) => {
       const hasItems = items.length > 0;
       if (emptyRoot) emptyRoot.hidden = hasItems;
       if (submit) submit.disabled = !hasItems;
+      if (totalsRoot) totalsRoot.hidden = !hasItems;
+      if (subtotalRoot) subtotalRoot.textContent = formatMoney(items.reduce((sum, item) => sum + itemSubtotal(item), 0));
       if (!itemsRoot) return;
 
       itemsRoot.innerHTML = items.map((item) => `
         <article class="summary-item">
           <strong>${item.name}</strong>
-          <span>${item.price} x ${item.quantity}</span>
+          <span>${item.line_subtotal || `${item.price} x ${item.quantity}`}</span>
         </article>
       `).join('');
     };
@@ -250,6 +338,80 @@ import { tcgApi } from '../lib/tcg-api';
     display: grid;
     grid-template-columns: 0.7fr 1fr;
     gap: 12px;
+  }
+
+  .field select,
+  .field textarea {
+    width: 100%;
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-item);
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font: inherit;
+    padding: 12px 14px;
+  }
+
+  .field textarea {
+    resize: vertical;
+    min-height: 96px;
+  }
+
+  .delivery-options {
+    display: grid;
+    gap: 10px;
+  }
+
+  .delivery-options label {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 12px;
+    align-items: start;
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-item);
+    padding: 12px;
+    cursor: pointer;
+  }
+
+  .delivery-options input {
+    margin-top: 3px;
+    accent-color: var(--color-primary);
+  }
+
+  .delivery-options strong,
+  .delivery-options small {
+    display: block;
+  }
+
+  .delivery-options small {
+    margin-top: 3px;
+    color: var(--color-body);
+  }
+
+  .checkout-totals {
+    display: grid;
+    gap: 8px;
+    padding-top: 12px;
+  }
+
+  .checkout-totals[hidden] {
+    display: none;
+  }
+
+  .checkout-totals div {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .checkout-totals strong {
+    color: var(--color-primary);
+  }
+
+  .checkout-totals p {
+    margin: 4px 0 0;
+    color: var(--color-body);
+    font-size: 0.88rem;
+    line-height: 1.5;
   }
 
   :global(.summary-item) {
