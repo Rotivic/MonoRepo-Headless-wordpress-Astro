@@ -368,9 +368,9 @@ PUBLIC_ENABLE_BLOG=false
 Scripts disponibles:
 
 ```sh
-docker compose exec web pnpm run dev
-docker compose exec web pnpm run build
-docker compose exec web pnpm run preview
+docker compose exec web pnpm --filter tcg-platform-web run dev
+docker compose exec web pnpm --filter tcg-platform-web run build
+docker compose exec web pnpm --filter tcg-platform-web run preview
 ```
 
 Normalmente no hace falta ejecutar `pnpm run dev` a mano porque Compose ya lo arranca.
@@ -716,7 +716,7 @@ docker compose exec php wp redis status --allow-root
 Validar build de Astro:
 
 ```sh
-docker compose exec web pnpm run build
+docker compose exec web pnpm --filter tcg-platform-web run build
 ```
 
 Trabajar con Flutter:
@@ -784,7 +784,7 @@ El entorno ha sido verificado con:
 ```sh
 docker compose up -d --build
 docker compose ps
-docker compose exec web pnpm run build
+docker compose exec web pnpm --filter tcg-platform-web run build
 docker compose --profile mobile run --rm mobile-tools flutter --version
 docker compose --profile mobile run --rm mobile-tools flutter pub get
 docker compose --profile mobile run --rm mobile-tools flutter analyze
