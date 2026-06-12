@@ -16,6 +16,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+.pnpm-store/
 
 # Environment/secrets
 .env
@@ -35,6 +36,7 @@ backups/
 apps/backend/.initialized
 
 # Node/Astro
+node_modules/
 apps/web/node_modules/
 apps/web/.astro/
 apps/web/dist/

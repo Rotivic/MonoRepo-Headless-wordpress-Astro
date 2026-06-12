@@ -81,15 +81,15 @@ docker compose up -d --build
 Tambien puedes usar los scripts utilitarios de la raiz:
 
 ```sh
-npm run start
-npm run status
-npm run logs
-npm run web:build
-npm run web:test
-npm run backend:test
-npm run backend:lint
-npm run backend:plugins
-npm run db:ui
+pnpm run start
+pnpm run status
+pnpm run logs
+pnpm run web:build
+pnpm run web:test
+pnpm run backend:test
+pnpm run backend:lint
+pnpm run backend:plugins
+pnpm run db:ui
 ```
 
 La primera ejecucion puede tardar porque descarga imagenes Docker, instala dependencias de Node dentro del volumen `web_node_modules` y prepara las dependencias Composer del backend dentro de volumenes Docker.
@@ -307,7 +307,7 @@ El idioma por defecto es `es_ES`. El core y las traducciones disponibles de plug
 La plantilla incluye seeds demo para dejar un entorno util desde el primer arranque:
 
 ```sh
-npm run backend:seed
+pnpm run backend:seed
 ```
 
 El primer `docker compose up -d --build` ejecuta `scripts/seed-demo-all.php` por defecto. Esto crea contenido de ejemplo, un catalogo demo de WooCommerce y usuarios base si no existen.
@@ -334,7 +334,7 @@ Para arrancar una instalacion limpia sin contenido demo, define:
 WP_DEMO_SEED=false
 ```
 
-Puedes volver a lanzar los seeds manualmente con `npm run backend:seed` o con los comandos separados `npm run seed:shop`, `npm run seed:blog` y `npm run seed:users`.
+Puedes volver a lanzar los seeds manualmente con `pnpm run backend:seed` o con los comandos separados `pnpm run seed:shop`, `pnpm run seed:blog` y `pnpm run seed:users`.
 
 ## Frontend Astro
 
@@ -347,7 +347,7 @@ apps/web
 El servicio `web` usa `node:22-alpine`, monta `apps/web` en `/app`, instala dependencias y ejecuta:
 
 ```sh
-npm run dev -- --host 0.0.0.0
+pnpm run dev -- --host 0.0.0.0
 ```
 
 Variable expuesta al frontend:
@@ -368,12 +368,12 @@ PUBLIC_ENABLE_BLOG=false
 Scripts disponibles:
 
 ```sh
-docker compose exec web npm run dev
-docker compose exec web npm run build
-docker compose exec web npm run preview
+docker compose exec web pnpm run dev
+docker compose exec web pnpm run build
+docker compose exec web pnpm run preview
 ```
 
-Normalmente no hace falta ejecutar `npm run dev` a mano porque Compose ya lo arranca.
+Normalmente no hace falta ejecutar `pnpm run dev` a mano porque Compose ya lo arranca.
 
 ## App mobile Flutter
 
@@ -615,36 +615,36 @@ Ejemplos actuales:
 Scripts desde la raiz:
 
 ```sh
-npm run start
-npm run stop
-npm run status
-npm run logs
-npm run logs:php
-npm run logs:web
-npm run backend:composer
-npm run backend:plugins
-npm run backend:seed
-npm run backend:redis
-npm run backend:2fa-reset -- admin
-npm run db:ui
-npm run mail:ui
-npm run setup:demo
-npm run db:backup
-npm run db:restore -- backups/archivo.sql
-npm run doctor
-npm run web:build
-npm run web:test
-npm run backend:test
-npm run backend:lint
-npm run backend:lint:fix
-npm run mobile:analyze
-npm run mobile:test
+pnpm run start
+pnpm run stop
+pnpm run status
+pnpm run logs
+pnpm run logs:php
+pnpm run logs:web
+pnpm run backend:composer
+pnpm run backend:plugins
+pnpm run backend:seed
+pnpm run backend:redis
+pnpm run backend:2fa-reset -- admin
+pnpm run db:ui
+pnpm run mail:ui
+pnpm run setup:demo
+pnpm run db:backup
+pnpm run db:restore -- backups/archivo.sql
+pnpm run doctor
+pnpm run web:build
+pnpm run web:test
+pnpm run backend:test
+pnpm run backend:lint
+pnpm run backend:lint:fix
+pnpm run mobile:analyze
+pnpm run mobile:test
 ```
 
 Mailpit captura emails locales enviados por WordPress:
 
 ```sh
-npm run mail:ui
+pnpm run mail:ui
 ```
 
 Interfaz:
@@ -656,15 +656,15 @@ http://localhost:8025
 Resetear 2FA de un usuario desde WP-CLI:
 
 ```sh
-npm run backend:2fa-reset -- admin
-npm run backend:2fa-reset -- admin@test.com
+pnpm run backend:2fa-reset -- admin
+pnpm run backend:2fa-reset -- admin@test.com
 ```
 
 Backups locales de base de datos:
 
 ```sh
-npm run db:backup
-npm run db:restore -- backups/tcg-platform-YYYYMMDD-HHMMSS.sql
+pnpm run db:backup
+pnpm run db:restore -- backups/tcg-platform-YYYYMMDD-HHMMSS.sql
 ```
 
 `db:restore` pide escribir `RESTORE` antes de tocar la base de datos local.
@@ -672,22 +672,22 @@ npm run db:restore -- backups/tcg-platform-YYYYMMDD-HHMMSS.sql
 Chequeo general del starter:
 
 ```sh
-npm run doctor
+pnpm run doctor
 ```
 
 Seeds separados:
 
 ```sh
-npm run seed
-npm run seed:shop
-npm run seed:blog
-npm run seed:users
+pnpm run seed
+pnpm run seed:shop
+pnpm run seed:blog
+pnpm run seed:users
 ```
 
 Adminer se arranca solo cuando hace falta:
 
 ```sh
-npm run db:ui
+pnpm run db:ui
 ```
 
 Credenciales locales:
@@ -716,7 +716,7 @@ docker compose exec php wp redis status --allow-root
 Validar build de Astro:
 
 ```sh
-docker compose exec web npm run build
+docker compose exec web pnpm run build
 ```
 
 Trabajar con Flutter:
@@ -784,7 +784,7 @@ El entorno ha sido verificado con:
 ```sh
 docker compose up -d --build
 docker compose ps
-docker compose exec web npm run build
+docker compose exec web pnpm run build
 docker compose --profile mobile run --rm mobile-tools flutter --version
 docker compose --profile mobile run --rm mobile-tools flutter pub get
 docker compose --profile mobile run --rm mobile-tools flutter analyze

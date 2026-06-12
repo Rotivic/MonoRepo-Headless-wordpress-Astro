@@ -175,6 +175,15 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     let totalsData    = null;
     let appliedCoupon = '';
 
+    const escapeHtml = (value) =>
+      String(value ?? '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;',
+      }[char]));
+
     const formatMoney = (value) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(value);
 
     const itemSubtotal = (item) => {
@@ -292,12 +301,13 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       const current = (form?.querySelector('[name="shipping_method"]:checked') as HTMLInputElement)?.value || 'local_delivery';
 
       deliveryRoot.innerHTML = methods.map((m) => {
-        const id    = String(m.id || '');
-        const label = String(m.label || id);
-        const cost  = m.cost_raw === 0 ? 'Gratis' : (m.cost || formatMoney(m.cost_raw || 0));
+        const rawId = String(m.id || '');
+        const id    = escapeHtml(rawId);
+        const label = escapeHtml(m.label || rawId);
+        const cost  = escapeHtml(m.cost_raw === 0 ? 'Gratis' : (m.cost || formatMoney(m.cost_raw || 0)));
         return `
           <label>
-            <input type="radio" name="shipping_method" value="${id}" ${id === current ? 'checked' : ''} />
+            <input type="radio" name="shipping_method" value="${id}" ${rawId === current ? 'checked' : ''} />
             <span>
               <strong>${label}</strong>
               <small>${cost}</small>
@@ -322,8 +332,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
       itemsRoot.innerHTML = items.map((item) => `
         <article class="summary-item">
-          <strong>${item.name}</strong>
-          <span>${item.line_subtotal || `${item.price} x ${item.quantity}`}</span>
+          <strong>${escapeHtml(item.name)}</strong>
+          <span>${escapeHtml(item.line_subtotal || `${item.price} x ${item.quantity}`)}</span>
         </article>
       `).join('');
 

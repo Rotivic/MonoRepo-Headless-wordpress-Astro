@@ -13,8 +13,8 @@ class VerifyEmailCubit extends Cubit<VerifyEmailState> {
 
   Future<void> resendEmail() async {
     final token = _sessionStore.token;
-    if (token == null) {
-      emit(const VerifyEmailError('No se encontrÃ³ el token de sesiÃ³n'));
+    if (token == null || token.isEmpty) {
+      emit(const VerifyEmailError('No se encontro una sesion activa'));
       return;
     }
 
@@ -31,8 +31,8 @@ class VerifyEmailCubit extends Cubit<VerifyEmailState> {
 
   Future<void> verifyCode(String code) async {
     final token = _sessionStore.token;
-    if (token == null) {
-      emit(const VerifyEmailError('No se encontrÃ³ el token de sesiÃ³n'));
+    if (token == null || token.isEmpty) {
+      emit(const VerifyEmailError('No se encontro una sesion activa'));
       return;
     }
 
@@ -48,38 +48,21 @@ class VerifyEmailCubit extends Cubit<VerifyEmailState> {
   }
 
   Future<void> checkVerificationStatus() async {
-    final email = _sessionStore.email;
-    final password = _sessionStore.password;
-
-    if (email == null || password == null) {
-      emit(const VerifyEmailError('No se encontraron credenciales guardadas'));
+    final token = _sessionStore.token;
+    if (token == null || token.isEmpty) {
+      emit(const VerifyEmailError('No se encontro una sesion activa'));
       return;
     }
 
     emit(const VerifyEmailLoading());
     try {
-      final result = await _authRepository.login(
-        email: email,
-        password: password,
-      );
-
-      // En el flujo de checkVerificationStatus, esperamos que el login sea directo (ya verificado)
-      // o que devuelva el usuario para comprobar su estado.
-      if (result.token != null && result.user != null) {
-        await _sessionStore.saveCredentials(
-          token: result.token!,
-          email: email,
-          password: password,
-          userId: result.user!.id,
-        );
-
-        if (result.user!.isVerified) {
-          emit(const VerifyEmailVerified());
-          return;
-        }
+      final user = await _authRepository.getUserByToken(token);
+      if (user.isVerified) {
+        emit(const VerifyEmailVerified());
+        return;
       }
 
-      emit(const VerifyEmailError('El correo aÃºn no ha sido verificado'));
+      emit(const VerifyEmailError('El correo aun no ha sido verificado'));
     } on NetworkException catch (e) {
       emit(VerifyEmailError(e.message));
     } catch (e) {

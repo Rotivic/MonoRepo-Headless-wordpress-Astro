@@ -294,6 +294,7 @@ final class TCG_Platform_API
 
         return new WP_REST_Response([
             'two_factor' => false,
+            'token' => $token,
             'data' => self::user_payload($user),
         ], 201);
     }
@@ -382,6 +383,7 @@ final class TCG_Platform_API
 
         return new WP_REST_Response([
             'two_factor' => false,
+            'token' => $token,
             'data' => self::user_payload($user),
         ]);
     }
@@ -412,7 +414,7 @@ final class TCG_Platform_API
             ['revoked_at' => self::now()],
             ['id' => (int) $auth['token_row']->id],
             ['%s'],
-            ['%d']
+            ['%d'],
         );
 
         self::clear_session_cookie();
@@ -593,11 +595,11 @@ final class TCG_Platform_API
 
         $rows = $wpdb->get_results($wpdb->prepare(
             'SELECT id, device_name, created_at, last_used_at, expires_at FROM ' . self::tokens_table() . ' WHERE user_id = %d AND revoked_at IS NULL AND expires_at > UTC_TIMESTAMP() ORDER BY COALESCE(last_used_at, created_at) DESC',
-            (int) $auth['user']->ID
+            (int) $auth['user']->ID,
         ));
 
         return new WP_REST_Response([
-            'data' => array_map(static fn (object $row): array => [
+            'data' => array_map(static fn(object $row): array => [
                 'id' => (int) $row->id,
                 'device_name' => (string) $row->device_name,
                 'created_at' => mysql_to_rfc3339((string) $row->created_at),
@@ -626,7 +628,7 @@ final class TCG_Platform_API
                 'user_id' => (int) $auth['user']->ID,
             ],
             ['%s'],
-            ['%d', '%d']
+            ['%d', '%d'],
         );
 
         if ($session_id === (int) $auth['token_row']->id) {
@@ -672,7 +674,7 @@ final class TCG_Platform_API
         $total = (int) $query->get_total();
 
         return new WP_REST_Response([
-            'data' => array_map(static fn (WP_User $user): array => [
+            'data' => array_map(static fn(WP_User $user): array => [
                 'id' => (int) $user->ID,
                 'email' => $user->user_email,
                 'display_name' => $user->display_name,
@@ -791,6 +793,7 @@ final class TCG_Platform_API
 
         return new WP_REST_Response([
             'two_factor' => false,
+            'token' => $token,
             'data' => self::user_payload($user),
         ]);
     }
@@ -857,7 +860,11 @@ final class TCG_Platform_API
         header('X-Content-Type-Options: nosniff');
         header('Referrer-Policy: strict-origin-when-cross-origin');
         header('Permissions-Policy: camera=(), microphone=(), geolocation=()');
-        header("Content-Security-Policy: frame-ancestors 'self'");
+        header("Content-Security-Policy: default-src 'self'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'; object-src 'none'; img-src 'self' data: https:; connect-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'");
+
+        if (is_ssl()) {
+            header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
+        }
     }
 
     public static function configure_mailer(PHPMailer\PHPMailer\PHPMailer $phpmailer): void
@@ -946,7 +953,7 @@ final class TCG_Platform_API
         $token_hash = self::hash_token($token);
         $row = $wpdb->get_row($wpdb->prepare(
             'SELECT * FROM ' . self::tokens_table() . ' WHERE token_hash = %s AND revoked_at IS NULL AND expires_at > UTC_TIMESTAMP() LIMIT 1',
-            $token_hash
+            $token_hash,
         ));
 
         if (! $row) {
@@ -968,7 +975,7 @@ final class TCG_Platform_API
                 ],
                 ['id' => (int) $row->id],
                 ['%s', '%s', '%s'],
-                ['%d']
+                ['%d'],
             );
         }
 
@@ -1004,7 +1011,7 @@ final class TCG_Platform_API
                 'created_at' => $created_at,
                 'expires_at' => $expires_at,
             ],
-            ['%d', '%s', '%s', '%s', '%s', '%s', '%s']
+            ['%d', '%s', '%s', '%s', '%s', '%s', '%s'],
         );
 
         return $token;
@@ -1018,7 +1025,7 @@ final class TCG_Platform_API
             'UPDATE ' . self::tokens_table() . ' SET revoked_at = %s WHERE user_id = %d AND device_name = %s AND revoked_at IS NULL',
             self::now(),
             $user_id,
-            $device_name
+            $device_name,
         ));
     }
 
@@ -1030,7 +1037,7 @@ final class TCG_Platform_API
             'UPDATE ' . self::tokens_table() . ' SET revoked_at = %s WHERE user_id = %d AND id != %d AND revoked_at IS NULL',
             self::now(),
             $user_id,
-            $token_id
+            $token_id,
         ));
     }
 
@@ -1064,7 +1071,7 @@ final class TCG_Platform_API
         ];
     }
 
-    private static function validate_password(string $password): null|WP_Error
+    private static function validate_password(string $password): ?WP_Error
     {
         if (strlen($password) < 12) {
             return self::error('tcg_password_too_short', 'Password must contain at least 12 characters.', 422);
@@ -1304,7 +1311,7 @@ final class TCG_Platform_API
         return hash_hmac('sha256', $raw . '|' . $token_hash, wp_salt('nonce'));
     }
 
-    private static function is_allowed_origin(string|null $origin): bool
+    private static function is_allowed_origin(?string $origin): bool
     {
         if (! $origin) {
             return false;
@@ -1450,7 +1457,7 @@ final class TCG_Platform_API
         return $challenge_token;
     }
 
-    private static function read_two_factor_challenge(string $challenge_token): array|null
+    private static function read_two_factor_challenge(string $challenge_token): ?array
     {
         if ($challenge_token === '') {
             return null;
@@ -1484,7 +1491,7 @@ final class TCG_Platform_API
             'otpauth://totp/%s?secret=%s&issuer=%s&algorithm=SHA1&digits=6&period=30',
             $label,
             $secret,
-            rawurlencode(self::TWO_FACTOR_ISSUER)
+            rawurlencode(self::TWO_FACTOR_ISSUER),
         );
     }
 
@@ -1533,7 +1540,7 @@ final class TCG_Platform_API
 
     private static function hash_recovery_codes(array $codes): array
     {
-        return array_map(static fn (string $code): string => self::hash_context(self::normalize_recovery_code($code)), $codes);
+        return array_map(static fn(string $code): string => self::hash_context(self::normalize_recovery_code($code)), $codes);
     }
 
     private static function consume_recovery_code(int $user_id, string $code): bool

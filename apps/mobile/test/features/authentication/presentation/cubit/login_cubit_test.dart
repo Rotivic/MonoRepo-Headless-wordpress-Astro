@@ -39,7 +39,6 @@ void main() {
         () => sessionStore.saveCredentials(
           token: any(named: 'token'),
           email: any(named: 'email'),
-          password: any(named: 'password'),
           userId: any(named: 'userId'),
         ),
       ).thenAnswer((_) async {});
@@ -57,7 +56,6 @@ void main() {
         () => sessionStore.saveCredentials(
           token: 'abc',
           email: 'a@a.com',
-          password: '123456',
           userId: 1,
         ),
       ).called(1);

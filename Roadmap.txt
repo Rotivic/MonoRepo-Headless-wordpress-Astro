@@ -1,0 +1,180 @@
+Sprint 1: sesion local, invitado/login y reglas base.
+- Hecho: limpiar datos locales al cerrar sesion desde header, perfil o revocando la sesion actual.
+- Hecho: carrito invitado permitido solo como estado temporal de navegador.
+- Hecho: wishlist requiere login y se persiste en WordPress mediante API privada.
+- Hecho: checkout requiere login antes de crear pedido demo.
+- Hecho: login acepta next=/ruta para volver al flujo que pidio autenticacion.
+- Hecho: login/registro marcan tcg.cart.pending-merge si el usuario entra con carrito invitado.
+- Pendiente para Sprint 3: al hacer login con carrito invitado, fusionar con carrito de cuenta.
+- Regla para fusion: si el mismo producto existe en ambos carritos, sumar cantidades y validar stock/precio en backend.
+- Regla de logout: limpiar siempre carrito local, ultimo pedido local, cache de usuario y cualquier fallback local temporal.
+- Regla de checkout real: crear pedido persistente solo con cuenta autenticada.
+
+Sprint 2: wishlist persistente por usuario en API + web conectada.
+- Hecho: modulo backend TCG_Platform_API_Wishlist dentro del mu-plugin tcg-api.
+- Hecho: tabla wp_tcg_wishlist_items con user_id, product_id y clave unica user_product.
+- Hecho: endpoints privados GET/POST/DELETE en /wp-json/tcg/v1/wishlist.
+- Hecho: la UI web lee/escribe contra API con CSRF.
+- Hecho: wishlist guarda solo relaciones; nombre, precio, imagen y stock salen de WooCommerce.
+- Hecho: bus ligero con evento tcg:wishlist-updated y detail productId/action para sincronizar vistas visibles.
+- Hecho: skeletons/loader en tienda, producto, wishlist, carrito, off-canvas, perfil, usuarios, ventas, inventario y pedidos.
+- Hecho: estados vacios post-carga para evitar flashes antes de terminar peticiones.
+- Hecho: inventario pasa a carga cliente tras validar permisos para no bloquear el build/SSR.
+- Hecho: escape basico de datos dinamicos renderizados con innerHTML en vistas de carrito, off-canvas, wishlist, producto e inventario.
+- Hecho: feedback visual de error en botones de wishlist cuando una accion falla.
+- Pendiente: consumir el mismo contrato desde Flutter cuando exista pantalla mobile de wishlist.
+
+Sprint 3: carrito persistente por usuario + migracion/fusion desde localStorage.
+- Hecho: modulo backend TCG_Platform_API_Cart dentro del mu-plugin tcg-api.
+- Hecho: tabla wp_tcg_cart_items con user_id, product_id, quantity y clave unica user_product.
+- Hecho: endpoints privados GET/POST/PATCH/DELETE en /wp-json/tcg/v1/cart.
+- Hecho: endpoint POST /wp-json/tcg/v1/cart/merge para fusionar carrito invitado tras login/registro.
+- Hecho: la web usa carrito local para invitados y carrito de cuenta para usuarios autenticados.
+- Hecho: login/registro fusionan el carrito invitado y sustituyen la cache local por el carrito persistente.
+- Hecho: checkout lee el carrito activo de cuenta y limpia el carrito persistente al crear pedido demo.
+- Hecho: validacion backend de producto publicable, comprable, stock y cantidad maxima antes de guardar.
+- Regla de stock: el carrito persistente representa intencion, no reserva stock.
+- Regla de stock: WooCommerce debe validar disponibilidad al crear pedido/checkout; si ya no hay stock suficiente, bloquear o ajustar cantidad.
+- Regla de stock: la reserva temporal, si se usa, debe ocurrir en pedido pendiente/draft o checkout, no al anadir al carrito.
+- Pendiente para Sprint 4: checkout real debe revalidar precio/stock justo antes de crear pedido real.
+
+Sprint 4: checkout real con WooCommerce o capa propia controlada.
+- Hecho: modulo backend TCG_Platform_API_Checkout dentro del mu-plugin tcg-api.
+- Hecho: endpoint privado POST /wp-json/tcg/v1/checkout.
+- Hecho: checkout local de pruebas sin proveedor externo, con payment_method tcg_local_test.
+- Hecho: convertir carrito autenticado persistente en pedido real WooCommerce.
+- Hecho: revalidar producto, comprable, stock y cantidad justo antes de crear pedido.
+- Hecho: crear pedido WooCommerce en estado on-hold y reducir stock al confirmar checkout.
+- Hecho: vaciar carrito persistente tras crear pedido real.
+- Hecho: /compra-realizada muestra el pedido real devuelto por WooCommerce, no un pedido demo.
+- Pendiente futuro: sustituir tcg_local_test por proveedor configurable cuando exista pasarela.
+
+Sprint 5: pedidos del usuario, ventas, inventario y backoffice util.
+- Hecho: modulo backend TCG_Platform_API_Orders dentro del mu-plugin tcg-api.
+- Hecho: endpoint privado GET /wp-json/tcg/v1/orders para pedidos reales del usuario.
+- Hecho: endpoint privado GET /wp-json/tcg/v1/admin/sales para resumen de ventas backoffice.
+- Hecho: /mis-pedidos consume pedidos reales WooCommerce por customer_id.
+- Hecho: /ventas muestra metricas reales, grafica de ultimos 30 dias, tabla de pedidos, buscador, paginacion y modal de detalle solo lectura.
+- Hecho: /inventario ya lee productos reales de WooCommerce con permisos backoffice.
+- Regla: WordPress sigue siendo fuente operativa para gestion sensible; Astro muestra lecturas y accesos controlados.
+
+Sprint 6: catalogo, busqueda, filtros y ficha de producto mas completa.
+- Hecho: seed demo de tienda ampliado para instalaciones nuevas y relanzado manual.
+- Hecho: el seed crea categorias, etiquetas, atributos globales, marcas como atributo, cupones, productos simples y productos variables.
+- Hecho: el catalogo demo incluye productos destacados, en rebaja, con stock, bajo stock, agotados y en reserva/backorder para contrastar filtros y badges.
+- Hecho: busqueda real en /tienda contra WooCommerce Store API con debounce de 350ms.
+- Hecho: filtros por categoria (lista desde Store API), estado (destacados, en oferta, solo en stock) y rango de precio con campos min/max.
+- Hecho: orden por recientes, nombre A-Z, precio menor, precio mayor y disponibles primero (stock_status=instock).
+- Hecho: /tienda usa paginacion real contra WooCommerce (page/per_page + cabeceras X-WP-Total/X-WP-TotalPages), sin cargar lote fijo local.
+- Hecho: badges reutilizables en tarjetas de producto: Oferta, Destacado, Agotado, Bajo stock y Reserva basados en datos de WooCommerce.
+- Hecho: helper product-badges.ts con getProductBadges y getProductBadgesHtml, exportable a cualquier bloque.
+- Hecho: componente ProductBadges.astro server-side preparado para bloques de home.
+- Hecho: ficha de producto con stock visible (en stock, bajo stock con cantidad restante, agotado, reserva), selector de cantidad con limite por stock_quantity, categorias visibles como enlaces a /tienda?category=slug.
+- Hecho: productos relacionados en ficha cargados desde la misma categoria del producto actual.
+- Hecho: productos variables se muestran correctamente en catalogo con boton "Ver opciones" en lugar de "Anadir"; en ficha se muestra aviso de seleccion de variacion y se bloquea el add-to-cart.
+- Pendiente Sprint 7: selector completo de variaciones en ficha de producto variable (atributos combinados, imagen por variacion, precio por variacion).
+- Pendiente Sprint 7: el soporte completo de variaciones excede este sprint; hasta entonces los productos variables redirigen a la ficha donde se indica la situacion al usuario.
+
+Sprint 7: carrito avanzado y validacion visible.
+- Hecho: cambiar cantidades desde carrito y off-canvas con controles +/-, input numerico y eliminacion al bajar a 0.
+- Hecho: mostrar limites de stock mediante max_quantity y bloquear incrementos por encima del maximo disponible.
+- Hecho: el backend devuelve subtotal, precio bruto, subtotal de linea, stock_status, is_valid y notice por item.
+- Hecho: revalidacion visible en carrito/off-canvas cuando el producto queda sin stock, supera disponibilidad o tiene aviso de bajo stock.
+- Hecho: subtotal visible antes de checkout y aviso de que impuestos/envio se calcularan cuando exista configuracion.
+- Hecho: mensajes de error de carrito mas claros para sin stock, no comprable, no disponible y stock insuficiente.
+- Pendiente: mostrar desglose real de impuestos/envio cuando Sprint 11 conecte cupones, impuestos y metodos de envio WooCommerce.
+
+Sprint 8: checkout local mas realista y datos de envio.
+- Hecho: checkout ampliado con telefono, pais, provincia, direccion secundaria y notas del pedido.
+- Hecho: /checkout precarga nombre, email y datos de envio/facturacion guardados en el perfil WooCommerce cuando existen.
+- Hecho: al crear pedido se guardan billing/shipping meta del usuario para futuras compras.
+- Hecho: metodos locales preparados: entrega local de pruebas y recogida local, ambos sin coste por ahora.
+- Hecho: el pedido WooCommerce guarda metodo de entrega, nota del cliente, direccion completa y payment_method local.
+- Hecho: resumen de checkout muestra subtotal y placeholder explicito para impuestos/envio reales de Sprint 11.
+- Revisar emails WooCommerce generados por pedidos locales.
+- Permitir cancelar pedido en estado on-hold si tiene sentido para el flujo local.
+
+Sprint 9: pedidos del cliente.
+- Hecho: endpoint privado GET /wp-json/tcg/v1/orders/{id} con detalle solo lectura del pedido del cliente.
+- Hecho: /mis-pedidos muestra detalle ampliado en modal con direccion, pago, entrega, notas, lineas y totales.
+- Hecho: estados de pedido con etiqueta, tono visual y descripcion para cliente.
+- Hecho: endpoint POST /wp-json/tcg/v1/orders/{id}/repeat para repetir pedido validando productos y stock antes de anadir al carrito.
+- Hecho: /mis-pedidos permite repetir pedido y sincroniza el carrito/off-canvas.
+- Hecho: recibo/factura queda preparado como accion deshabilitada con nota hasta integrar fiscalidad/PDF.
+- Hecho: soporte y solicitud de cancelacion quedan preparados visualmente desde el detalle; cancelacion real sigue pendiente de definir flujo.
+
+Sprint 10: backoffice frontend operativo.
+- Hecho: endpoint privado GET /wp-json/tcg/v1/admin/inventory con busqueda, filtros, paginacion real y alertas.
+- Hecho: /inventario usa busqueda con debounce, filtros por stock/tipo y paginacion real contra backend.
+- Hecho: /inventario muestra alertas de bajo stock y sin stock.
+- Hecho: /inventario enlaza cada producto a su edicion en WordPress.
+- Hecho: /ventas permite rango de fechas configurable para metricas, grafica y tabla.
+- Hecho: /ventas exporta CSV de pedidos filtrados.
+- Hecho: /ventas enlaza cada pedido a su edicion en WordPress.
+- Hecho: /admin muestra panel de acciones pendientes: pedidos en espera, bajo stock y sin stock.
+
+Sprint 11: cupones, impuestos y envios.
+- Hecho: modulo backend TCG_Platform_API_Coupons dentro del mu-plugin tcg-api.
+- Hecho: endpoint GET /wp-json/tcg/v1/cart/totals con desglose de subtotal, descuento, envio, impuestos y total desde WooCommerce.
+- Hecho: endpoint POST /wp-json/tcg/v1/cart/coupon para validar y persistir cupon por usuario.
+- Hecho: endpoint DELETE /wp-json/tcg/v1/cart/coupon para quitar cupon persistido.
+- Hecho: validacion de cupon contra WooCommerce: existencia, caducidad, limite de usos, limite por usuario, gasto minimo/maximo y tipo de descuento (porcentaje, fijo).
+- Hecho: calculo de descuento usando WC_Coupon (percent, fixed_cart) sobre subtotal del carrito.
+- Hecho: calculo de envio usando WC_Shipping_Zones si hay metodos configurados, con fallback a entrega local / recogida local a 0 euros.
+- Hecho: calculo de impuestos usando WC_Tax si estan activados en WooCommerce, con fallback estable si estan desactivados.
+- Hecho: checkout aplica cupon (de la peticion o del user meta persistido) al pedido WooCommerce con apply_coupon antes de calculate_totals.
+- Hecho: checkout usa metodo de envio real de WooCommerce si existe, o los metodos locales de fallback.
+- Hecho: calculate_totals del pedido calcula taxes reales segun configuracion WooCommerce.
+- Hecho: cupon persistido en user meta se borra tras crear pedido exitoso.
+- Hecho: order_payload ampliado con subtotal, descuento, envio, impuestos, total e ids de cupones aplicados.
+- Hecho: /carrito muestra input de cupon, cupon aplicado con boton de quitar, subtotal, descuento, envio, impuestos y total.
+- Hecho: /checkout muestra desglose completo (subtotal, descuento, envio, impuestos, total) con datos reales de /cart/totals.
+- Hecho: /checkout actualiza totales al cambiar metodo de envio.
+- Hecho: /checkout pasa cupon aplicado al crear pedido para revalidacion en backend.
+- Hecho: mensajes de error claros por cupon invalido, caducado, limite de usos y gasto minimo/maximo.
+- Fallback documentado: si WooCommerce no tiene zonas de envio configuradas, se usan entrega local y recogida local a 0 euros.
+- Fallback documentado: si los impuestos estan desactivados en WooCommerce, el desglose omite la linea de impuestos sin romper el flujo.
+
+Sprint 12: estabilidad, tests y contrato mobile.
+- Hecho: trait TCG_API_ErrorTrait extraido a modules/Traits/ApiError.php y aplicado a los cinco modulos (Cart, Wishlist, Coupons, Checkout, Orders), eliminando el metodo duplicado.
+- Hecho: suite de tests Pest de integracion HTTP en apps/backend/tests/Feature/ con archivos HealthTest, AuthTest, CartTest, CouponTest, WishlistTest, CheckoutTest y OrdersTest.
+- Hecho: helper ApiClient.php que autentica usando Bearer token (sin CSRF) y wrappea todas las llamadas HTTP a la API de WP.
+- Hecho: configuracion pest.php con beforeAll que inyecta credenciales del usuario demo (TCG_TEST_EMAIL / TCG_TEST_PASSWORD o defaults del seed).
+- Hecho: ejecucion de tests backend con docker compose exec php vendor/bin/pest (requiere stack levantado).
+- Hecho: cabecera X-TCG-API-Version enviada en todas las respuestas del namespace tcg/v1 via filtro rest_post_dispatch.
+- Hecho: campo api_version anadido al payload del endpoint /health para clientes mobile.
+- Hecho: constante API_VERSION = 12 en la clase principal; incrementar al cambiar contrato de ruptura.
+- Hecho: tests web con Vitest (v4) para las lib criticas: security.test.ts (6 tests sobre csrfHeaders) y cart.test.ts (7 tests sobre readCart/writeCart).
+- Hecho: vitest.config.ts configurado con entorno jsdom y scripts test / test:watch / test:coverage en package.json del frontend.
+- Hecho: scripts npm run web:test, backend:test, backend:lint y backend:lint:fix anadidos al package.json raiz.
+- Auditoria de permisos: todos los endpoints estan correctamente protegidos. Cart/Wishlist/Coupons/Checkout usan require_auth. Orders user endpoints usan require_auth con comprobacion de ownership. /admin/sales e /admin/inventory usan require_auth + can_access_sales() interno (manage_options | manage_woocommerce | edit_shop_orders). /health y /admin/users usan require_admin. Sin permisos faltantes detectados.
+- Contrato API para Flutter: respuestas con envelope data consistente, fechas en DATE_ATOM (ISO 8601), dinero como string formateado y como _raw float, estados de pedido con status_label y status_tone, paginacion en meta con page/per_page/total/total_pages.
+
+Sprint 14: optimizacion de rendimiento de llamadas API.
+- Hecho: lib/fetch-cache.ts con dedupFetch (deduplicacion de requests en vuelo) y memGet/memSet (cache en memoria con TTL).
+- Hecho: cart.ts usa dedupFetch y deduplicacion de la llamada readAccountCart con una sola Promise compartida entre llamadores concurrentes.
+- Hecho: readActiveCart implementa stale-while-revalidate: devuelve cache localStorage inmediatamente y revalida en fondo, despachando tcg:cart-updated solo si los datos cambiaron.
+- Hecho: SiteHeader renderCanvas usa cache en memoria para renderizado instantaneo al reabrir el off-canvas; solo muestra skeleton en la primera apertura.
+- Hecho: eliminado el delay artificial de 160ms en renderCanvas.
+- Hecho: updateBadge es sincrono desde localStorage/cache en memoria; ya no bloquea en red para mostrar el badge.
+- Hecho: arranque de cabecera muestra badge inmediatamente y revalida el carrito en fondo.
+- Hecho: BaseLayout anade rel=preconnect y dns-prefetch al origen del API para pre-establecer la conexion TCP antes del primer fetch.
+- Hecho: tcg-api.php anade Cache-Control: public, max-age=60, stale-while-revalidate=300 solo a respuestas GET publicas de /wc/store/v1/products sin credenciales; nunca aplica a rutas autenticadas tcg/v1 ni a peticiones con cookies/bearer.
+- Impacto esperado: carrito page carga con datos inmediatos desde localStorage en lugar de esperar red; off-canvas se abre instantaneamente en visitas repetidas; tienda reutiliza respuestas cacheadas 60s; primer fetch del API ~50-100ms mas rapido por preconnect.
+
+Auditoria de seguridad previa a diseno:
+- Hecho: login, registro y 2FA dejan de devolver bearer token en el JSON; la sesion web queda soportada por cookie HttpOnly + CSRF.
+- Hecho: fetch-cache.ts deja de persistir respuestas autenticadas /tcg/v1/* en sessionStorage; solo persiste cache publica de Store API/WP permitida, y las rutas privadas quedan en memoria con TTL corto.
+- Hecho: SiteHeader renderiza avatar con DOM API en lugar de innerHTML para evitar inyeccion por avatar_url.
+- Hecho: CORS limita localhost a entornos no production y permite origenes configurables mediante TCG_ALLOWED_ORIGINS.
+- Hecho: cache HTTP publica restringida a productos Store API sin credenciales.
+- Hecho: permisos de inventario separados de ventas; inventario requiere manage_options, manage_woocommerce o edit_products.
+- Hecho: cabeceras defensivas basicas: X-Content-Type-Options, Referrer-Policy, Permissions-Policy y CSP frame-ancestors.
+- Pendiente antes de despliegue final: definir CSP completa (script-src, style-src, img-src, connect-src, font-src) cuando el diseno/assets finales esten estabilizados.
+- Pendiente antes de despliegue final: ejecutar prueba especifica de concurrencia de checkout/stock y revisar configuracion SSL/cookies secure en entorno real.
+
+Sprint 13: revision de carencias y errores visuales.
+- Hecho: precio tachado en rebajas. Anadida funcion formatStorePriceHtml en shop.ts que devuelve HTML con <del> para el precio regular y <ins> para el precio de oferta cuando el producto esta en rebaja. Actualizado en tienda/index.astro y producto.astro (incluyendo el cambio de variacion). Estilos anadidos en ambas paginas.
+- Hecho: entidades HTML en nombres de producto. En tienda/index.astro y en producto.astro los nombres de producto ahora pasan por _htmlToText antes de mostrarse, decodificando correctamente caracteres como &#8211; (guion largo) que WooCommerce puede devolver como entidades HTML.
+- Hecho: document.title dinamico en la ficha de producto. Tras cargar el producto, se actualiza document.title con el nombre real del producto.
+- Hecho: seed actualizado. Los tres productos demo que incluian el estado en su nombre (Pack coleccionista Mythic Mint - Oferta, Carta individual Dragon Warden - Bajo stock, Carta promo Eclipse Sentinel - Agotada) renombrados sin el sufijo de stock, que ya es gestionado por los badges. Para aplicar en una instalacion existente: npm run seed:shop.

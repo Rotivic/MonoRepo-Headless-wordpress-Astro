@@ -8,6 +8,10 @@ interface Props {
 const { product } = Astro.props;
 const image = product.images?.[0];
 const price = formatStorePrice(product.prices);
+const summary = (product.short_description || product.description || 'Producto preparado para el catalogo.')
+  .replace(/<[^>]*>/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim();
 ---
 
 <article class="product-card">
@@ -24,7 +28,7 @@ const price = formatStorePrice(product.prices);
   <div class="body">
     <div>
       <h2><a href={`/producto?slug=${product.slug}`}>{product.name}</a></h2>
-      <p set:html={product.short_description || product.description || 'Producto preparado para el catalogo.'} />
+      <p>{summary}</p>
     </div>
 
     <div class="actions">
