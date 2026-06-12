@@ -42,6 +42,14 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       warning: 'Aviso',
       error: 'Error',
     };
+    const escapeHtml = (value) =>
+      String(value ?? '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;',
+      }[char]));
 
     const render = (payload) => {
       const state = payload.status === 'ok' ? 'ok' : 'warning';
@@ -51,9 +59,9 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
       const entries = Object.entries(payload.checks || {});
       checks.innerHTML = entries.map(([key, check]) => `
-        <article class="check" data-state="${check.status}">
-          <span>${check.label || key}</span>
-          <strong>${labels[check.status] || check.status}</strong>
+        <article class="check" data-state="${escapeHtml(check.status)}">
+          <span>${escapeHtml(check.label || key)}</span>
+          <strong>${escapeHtml(labels[check.status] || check.status)}</strong>
         </article>
       `).join('');
     };

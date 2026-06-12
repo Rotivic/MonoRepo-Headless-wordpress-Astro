@@ -35,7 +35,10 @@ backups/
 apps/backend/.initialized
 
 # Node/Astro
+node_modules/
+.pnpm-store/
 apps/web/node_modules/
+apps/web/.pnpm-store/
 apps/web/.astro/
 apps/web/dist/
 

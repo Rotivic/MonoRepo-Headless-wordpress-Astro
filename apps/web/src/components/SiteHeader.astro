@@ -112,6 +112,14 @@ const { active = 'home' } = Astro.props;
   const logoutButton = document.querySelector('#header-logout');
   const authKey = 'tcg.authenticated';
   const userSummaryKey = 'tcg.user.summary';
+  const escapeHtml = (value) =>
+    String(value ?? '').replace(/[&<>"']/g, (char) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#039;',
+    }[char]));
 
   const getInitials = (user) => {
     return ([user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.email || 'U').slice(0, 1).toUpperCase();
@@ -121,7 +129,7 @@ const { active = 'home' } = Astro.props;
     if (!userAvatar || !summary) return;
 
     if (summary.avatar_url) {
-      userAvatar.innerHTML = '<img src="' + summary.avatar_url + '" alt="Avatar">';
+      userAvatar.innerHTML = '<img src="' + escapeHtml(summary.avatar_url) + '" alt="Avatar">';
       return;
     }
 
@@ -241,13 +249,13 @@ const { active = 'home' } = Astro.props;
     canvasItems.innerHTML = items.map((item) => `
       <li class="canvas-item">
         <div class="canvas-item-media">
-          ${item.image ? '<img src="' + item.image + '" alt="" loading="lazy">' : '<span aria-hidden="true">' + (item.name || '?').slice(0, 1).toUpperCase() + '</span>'}
+          ${item.image ? '<img src="' + escapeHtml(item.image) + '" alt="" loading="lazy">' : '<span aria-hidden="true">' + escapeHtml((item.name || '?').slice(0, 1).toUpperCase()) + '</span>'}
         </div>
         <div class="canvas-item-info">
-          <strong>${item.name}</strong>
-          <p>${item.price} &middot; &times;${item.quantity}</p>
+          <strong>${escapeHtml(item.name)}</strong>
+          <p>${escapeHtml(item.price)} &middot; &times;${escapeHtml(item.quantity)}</p>
         </div>
-        <button class="canvas-remove" type="button" data-id="${item.id}" aria-label="Quitar ${item.name}">
+        <button class="canvas-remove" type="button" data-id="${escapeHtml(item.id)}" aria-label="Quitar ${escapeHtml(item.name)}">
           <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </li>

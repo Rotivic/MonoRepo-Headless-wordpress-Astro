@@ -61,6 +61,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const emptyRoot = document.querySelector('#cart-empty');
     const actionsRoot = document.querySelector('#cart-actions');
     const clearButton = document.querySelector('#clear-cart');
+    const escapeHtml = (value) =>
+      String(value ?? '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;',
+      }[char]));
 
     const renderCart = () => {
       const items = _readCart();
@@ -73,13 +81,13 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       itemsRoot.innerHTML = items.map((item) => `
         <article class="cart-item">
           <div class="item-media">
-            ${item.image ? `<img src="${item.image}" alt="" loading="lazy">` : `<span aria-hidden="true">${(item.name || '?').slice(0, 1).toUpperCase()}</span>`}
+            ${item.image ? `<img src="${escapeHtml(item.image)}" alt="" loading="lazy">` : `<span aria-hidden="true">${escapeHtml((item.name || '?').slice(0, 1).toUpperCase())}</span>`}
           </div>
           <div class="item-info">
-            <strong>${item.name}</strong>
-            <p>${item.price} &middot; &times;${item.quantity}</p>
+            <strong>${escapeHtml(item.name)}</strong>
+            <p>${escapeHtml(item.price)} &middot; &times;${escapeHtml(item.quantity)}</p>
           </div>
-          <button class="remove-item" type="button" data-id="${item.id}" aria-label="Quitar ${item.name}">
+          <button class="remove-item" type="button" data-id="${escapeHtml(item.id)}" aria-label="Quitar ${escapeHtml(item.name)}">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </article>

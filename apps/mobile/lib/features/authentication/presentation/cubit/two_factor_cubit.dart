@@ -30,7 +30,6 @@ class TwoFactorCubit extends Cubit<TwoFactorState> {
       await _sessionStore.saveCredentials(
         token: result.token!,
         email: email,
-        password: password,
         userId: result.user!.id,
       );
 

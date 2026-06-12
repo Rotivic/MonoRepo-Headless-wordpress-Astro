@@ -190,6 +190,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const twoFactorStatus = document.querySelector('#two-factor-status');
 
     let currentUser = null;
+    const escapeHtml = (value) =>
+      String(value ?? '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;',
+      }[char]));
 
     const apiJson = async (url, options = {}) => {
       const response = await fetch(url, {
@@ -236,8 +244,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       const name = [user.first_name, user.last_name].filter(Boolean).join(' ') || user.email || 'Usuario';
       if (!avatarEl) return;
       avatarEl.innerHTML = user.avatar_url
-        ? `<img src="${user.avatar_url}" alt="${name}" width="56" height="56">`
-        : `<span>${name.slice(0, 1).toUpperCase()}</span>`;
+        ? `<img src="${escapeHtml(user.avatar_url)}" alt="${escapeHtml(name)}" width="56" height="56">`
+        : `<span>${escapeHtml(name.slice(0, 1).toUpperCase())}</span>`;
     };
 
     const showProfile = (user) => {
@@ -275,10 +283,10 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         sessionsList.innerHTML = data.data.map((session) => `
           <article class="session-item">
             <div>
-              <h4>${session.device_name || 'Dispositivo'}</h4>
-              <p>${session.current ? 'Sesion actual' : 'Otra sesion'} · Ultimo uso ${session.last_used_at || session.created_at}</p>
+              <h4>${escapeHtml(session.device_name || 'Dispositivo')}</h4>
+              <p>${session.current ? 'Sesion actual' : 'Otra sesion'} - Ultimo uso ${escapeHtml(session.last_used_at || session.created_at)}</p>
             </div>
-            <button class="button button-secondary revoke-session" type="button" data-id="${session.id}">
+            <button class="button button-secondary revoke-session" type="button" data-id="${escapeHtml(session.id)}">
               ${session.current ? 'Cerrar esta' : 'Cerrar'}
             </button>
           </article>
@@ -371,7 +379,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         });
         showProfile(data.data);
         if (Array.isArray(data.recovery_codes) && recoveryCodes) {
-          recoveryCodes.innerHTML = data.recovery_codes.map((code) => `<li><code>${code}</code></li>`).join('');
+          recoveryCodes.innerHTML = data.recovery_codes.map((code) => `<li><code>${escapeHtml(code)}</code></li>`).join('');
           recoveryCodesBox?.classList.remove('hidden');
         }
         setStatus(twoFactorStatus, 'Doble factor activado.', 'success');

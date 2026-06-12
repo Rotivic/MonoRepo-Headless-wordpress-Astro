@@ -762,6 +762,15 @@ final class TCG_Platform_API
 
     public static function send_cors_headers(mixed $served, WP_HTTP_Response $result, WP_REST_Request $request, WP_REST_Server $server): mixed
     {
+        header('X-Content-Type-Options: nosniff');
+        header('Referrer-Policy: strict-origin-when-cross-origin');
+        header('Permissions-Policy: camera=(), microphone=(), geolocation=()');
+        header("Content-Security-Policy: default-src 'self'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'; object-src 'none'; img-src 'self' data: https:; connect-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'");
+
+        if (is_ssl()) {
+            header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
+        }
+
         $origin = get_http_origin();
         if (self::is_allowed_origin($origin)) {
             header('Access-Control-Allow-Origin: ' . $origin);

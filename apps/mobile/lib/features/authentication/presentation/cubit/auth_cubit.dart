@@ -35,49 +35,14 @@ class AuthCubit extends Cubit<AuthState> {
   Future<void> initialize() async {
     await _sessionStore.initialize();
 
-    if (!_sessionStore.hasCredentials) {
+    if (!_sessionStore.hasCredentials || _sessionStore.token == null) {
       emit(const AuthUnauthenticated());
       return;
     }
 
-    // 1. Intentamos recuperar al usuario con el token actual (Autologin real)
-    if (_sessionStore.token != null) {
-      try {
-        final user = await _authRepository.getUserByToken(_sessionStore.token!);
-        updateAuthState(user);
-        return;
-      } catch (_) {
-        // Si el token fallÃ³, intentamos hacer login con credenciales
-      }
-    }
-
-    // 2. Si no hay token o fallÃ³, intentamos login con email/password
     try {
-      final result = await _authRepository.login(
-        email: _sessionStore.email!,
-        password: _sessionStore.password!,
-      );
-
-      // Si el login pide 2FA, el autologin no puede continuar automÃ¡ticamente
-      // Mantenemos Unauthenticated para que el usuario entre manualmente
-      if (result.twoFactorRequired) {
-        emit(const AuthUnauthenticated());
-        return;
-      }
-
-      if (result.token != null && result.user != null) {
-        await _sessionStore.saveCredentials(
-          token: result.token!,
-          email: _sessionStore.email!,
-          password: _sessionStore.password!,
-          userId: result.user!.id,
-        );
-
-        updateAuthState(result.user!);
-      } else {
-        await _sessionStore.clear();
-        emit(const AuthUnauthenticated());
-      }
+      final user = await _authRepository.getUserByToken(_sessionStore.token!);
+      updateAuthState(user);
     } catch (_) {
       await _sessionStore.clear();
       emit(const AuthUnauthenticated());

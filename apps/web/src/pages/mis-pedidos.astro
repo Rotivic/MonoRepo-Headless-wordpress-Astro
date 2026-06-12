@@ -29,6 +29,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const orderKey = 'tcg.last-order';
     const empty = document.querySelector('#orders-empty');
     const list = document.querySelector('#orders-list');
+    const escapeHtml = (value) =>
+      String(value ?? '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;',
+      }[char]));
 
     try {
       const order = JSON.parse(localStorage.getItem(orderKey) || 'null');
@@ -37,10 +45,10 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         list.innerHTML = `
           <article class="order-card">
             <div>
-              <strong>${order.id || 'Pedido demo'}</strong>
-              <p>${new Date(order.created_at).toLocaleString('es-ES')}</p>
+              <strong>${escapeHtml(order.id || 'Pedido demo')}</strong>
+              <p>${escapeHtml(new Date(order.created_at).toLocaleString('es-ES'))}</p>
             </div>
-            <span>${(order.items || []).length} producto(s)</span>
+            <span>${escapeHtml((order.items || []).length)} producto(s)</span>
             <span>Demo</span>
           </article>
         `;

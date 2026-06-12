@@ -31,6 +31,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const orderKey = 'tcg.last-order';
     const idRoot = document.querySelector('#order-id');
     const itemsRoot = document.querySelector('#order-items');
+    const escapeHtml = (value) =>
+      String(value ?? '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;',
+      }[char]));
 
     try {
       const order = JSON.parse(localStorage.getItem(orderKey) || 'null');
@@ -38,8 +46,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         idRoot.textContent = order.id || 'Pedido demo';
         itemsRoot.innerHTML = (order.items || []).map((item) => `
           <article class="order-line">
-            <strong>${item.name}</strong>
-            <span>${item.price} x ${item.quantity}</span>
+            <strong>${escapeHtml(item.name)}</strong>
+            <span>${escapeHtml(item.price)} x ${escapeHtml(item.quantity)}</span>
           </article>
         `).join('');
       }

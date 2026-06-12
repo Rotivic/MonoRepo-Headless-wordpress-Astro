@@ -2,6 +2,7 @@
   "name": "tcg-platform-template",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@11.0.0",
   "scripts": {
     "start": "docker compose up -d --build",
     "stop": "docker compose down",
@@ -14,7 +15,7 @@
     "seed": "docker compose exec php wp eval-file scripts/seed-demo-all.php --allow-root",
     "seed:blog": "docker compose exec php wp eval-file scripts/seed-demo-blog.php --allow-root",
     "seed:users": "docker compose exec php wp eval-file scripts/seed-demo-users.php --allow-root",
-    "backend:seed": "npm run seed",
+    "backend:seed": "pnpm run seed",
     "backend:redis": "docker compose exec php wp redis status --allow-root",
     "backend:2fa-reset": "docker compose exec php wp tcg 2fa-reset --allow-root",
     "db:ui": "docker compose --profile tools up -d db-admin",
@@ -22,8 +23,8 @@
     "db:restore": "powershell -ExecutionPolicy Bypass -File scripts/db-restore.ps1",
     "doctor": "powershell -ExecutionPolicy Bypass -File scripts/doctor.ps1",
     "mail:ui": "docker compose up -d mailpit",
-    "setup:demo": "npm run start && npm run seed",
-    "web:build": "docker compose exec web npm run build",
+    "setup:demo": "pnpm run start && pnpm run seed",
+    "web:build": "docker compose exec web pnpm --filter tcg-platform-web run build",
     "mobile:analyze": "docker compose --profile mobile run --rm mobile-tools flutter analyze",
     "mobile:test": "docker compose --profile mobile run --rm mobile-tools flutter test"
   }

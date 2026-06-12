@@ -78,6 +78,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const form = document.querySelector('#checkout-form');
     const status = document.querySelector('#checkout-status');
     const submit = document.querySelector('#checkout-submit');
+    const escapeHtml = (value) =>
+      String(value ?? '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;',
+      }[char]));
 
     const readCart = () => {
       try { return JSON.parse(localStorage.getItem(cartKey) || '[]'); } catch { return []; }
@@ -92,8 +100,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
       itemsRoot.innerHTML = items.map((item) => `
         <article class="summary-item">
-          <strong>${item.name}</strong>
-          <span>${item.price} x ${item.quantity}</span>
+          <strong>${escapeHtml(item.name)}</strong>
+          <span>${escapeHtml(item.price)} x ${escapeHtml(item.quantity)}</span>
         </article>
       `).join('');
     };

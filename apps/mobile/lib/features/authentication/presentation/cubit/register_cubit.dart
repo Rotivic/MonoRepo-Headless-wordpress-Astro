@@ -33,7 +33,6 @@ class RegisterCubit extends Cubit<RegisterState> {
         await _sessionStore.saveCredentials(
           token: result.token!,
           email: email,
-          password: password,
           userId: result.user!.id,
         );
 

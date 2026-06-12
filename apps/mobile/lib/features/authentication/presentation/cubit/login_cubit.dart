@@ -27,7 +27,6 @@ class LoginCubit extends Cubit<LoginState> {
       await sessionStore.saveCredentials(
         token: result.token!,
         email: email,
-        password: password,
         userId: result.user!.id,
       );
 

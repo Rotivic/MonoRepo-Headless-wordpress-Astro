@@ -46,6 +46,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const perPage = 5;
     let currentPage = 1;
     let currentSearch = '';
+    const escapeHtml = (value) =>
+      String(value ?? '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;',
+      }[char]));
 
     const setStatus = (message, state = '') => {
       status.textContent = message;
@@ -72,14 +80,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       setStatus(`${meta?.total || users.length} usuario(s) encontrados.`, 'success');
       list.innerHTML = users.map((user) => `
         <article class="user-row">
-          <div class="avatar">${(user.display_name || user.email || 'U').slice(0, 1).toUpperCase()}</div>
+          <div class="avatar">${escapeHtml((user.display_name || user.email || 'U').slice(0, 1).toUpperCase())}</div>
           <div class="main">
-            <strong>${user.display_name || user.email}</strong>
-            <span>${user.email}</span>
+            <strong>${escapeHtml(user.display_name || user.email)}</strong>
+            <span>${escapeHtml(user.email)}</span>
           </div>
-          <span>${(user.roles || []).join(', ') || 'sin rol'}</span>
+          <span>${escapeHtml((user.roles || []).join(', ') || 'sin rol')}</span>
           <span>${user.is_verified ? 'Verificado' : 'Pendiente'}</span>
-          <a class="button button-secondary" href="${user.edit_url}" target="_blank" rel="noreferrer">Editar</a>
+          <a class="button button-secondary" href="${escapeHtml(user.edit_url)}" target="_blank" rel="noreferrer">Editar</a>
         </article>
       `).join('');
       updatePagination(meta);

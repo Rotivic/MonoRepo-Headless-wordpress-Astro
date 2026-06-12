@@ -49,6 +49,16 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const slug = new URLSearchParams(window.location.search).get('slug');
     let currentProduct = null;
     let currentPrice = '-';
+    const escapeHtml = (value) =>
+      String(value ?? '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;',
+      }[char]));
+    const stripHtml = (value) =>
+      String(value ?? '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 
     const setStatus = (message, state = '') => {
       if (status instanceof HTMLElement) {
@@ -87,8 +97,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
         if (media instanceof HTMLElement) {
           media.innerHTML = image
-            ? `<img src="${image.src}" alt="${image.alt || currentProduct.name}">`
-            : `<span>${currentProduct.name.slice(0, 1).toUpperCase()}</span>`;
+            ? `<img src="${escapeHtml(image.src)}" alt="${escapeHtml(image.alt || currentProduct.name)}">`
+            : `<span>${escapeHtml(currentProduct.name.slice(0, 1).toUpperCase())}</span>`;
         }
         if (name) {
           name.textContent = currentProduct.name;
@@ -97,7 +107,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           price.textContent = currentPrice;
         }
         if (description instanceof HTMLElement) {
-          description.innerHTML = currentProduct.description || currentProduct.short_description || '';
+          description.textContent = stripHtml(currentProduct.description || currentProduct.short_description || '');
         }
         if (status instanceof HTMLElement) {
           status.hidden = true;
