@@ -18,6 +18,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             <p class="lede">
               Revisa tu seleccion antes de continuar al pago. El stock y los precios se revalidan al crear el pedido.
             </p>
+
+            <section class="cart-recommendations" id="cart-recommendations" hidden>
+              <div class="recommendations-head">
+                <p class="eyebrow">Tambien te puede interesar</p>
+                <h2>Completa tu compra</h2>
+              </div>
+              <div class="recommendations-grid" id="cart-recommendations-grid"></div>
+            </section>
           </div>
 
           <section class="cart-panel" aria-live="polite">
@@ -75,6 +83,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
               <a class="button button-primary" href="/checkout">Continuar compra</a>
               <button class="button button-secondary" id="clear-cart" type="button">Vaciar carrito</button>
             </div>
+
           </section>
         </section>
       </main>
@@ -87,8 +96,10 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   }
 
   <script>
-    import { clearCart, readActiveCart, readCartSummary, readCartTotals, removeCartItem, updateCartItem } from '../lib/cart';
+    import { addCartItem, clearCart, readActiveCart, readCartSummary, readCartTotals, removeCartItem, updateCartItem } from '../lib/cart';
+    import { cachedJson } from '../lib/fetch-cache';
     import { csrfHeaders } from '../lib/security';
+    import { addStoreFields, formatStorePrice, formatStorePriceHtml, shopApi, type StoreProduct } from '../lib/shop';
     import { tcgApi } from '../lib/tcg-api';
     import { addWishlistItem, readWishlist } from '../lib/wishlist';
 
@@ -104,6 +115,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const skeletonRoot  = document.querySelector('#cart-skeleton');
     const noticeRoot    = document.querySelector('#cart-notice');
     const clearButton   = document.querySelector('#clear-cart');
+    const recSection    = document.querySelector('#cart-recommendations');
+    const recGrid       = document.querySelector('#cart-recommendations-grid');
 
     const subtotalEl   = document.querySelector('#cart-subtotal');
     const discountRow  = document.querySelector('#discount-row');
@@ -129,6 +142,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     }[char]));
 
     const formatMoney = (value) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(value);
+
+    const productUrl = (item) => {
+      const slug = String(item.slug || '').trim();
+      return slug ? `/producto?slug=${encodeURIComponent(slug)}` : '/tienda';
+    };
 
     const itemSubtotal = (item) => {
       const raw = Number(item.line_subtotal_raw);
@@ -193,6 +211,126 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         window.setTimeout(() => button.classList.remove('is-error'), 1400);
       } finally {
         button.disabled = false;
+      }
+    };
+
+    const recommendationCard = (product) => {
+      const image = product.images?.[0];
+      const priceHtml = formatStorePriceHtml(product.prices, product.on_sale);
+      const pricePlain = formatStorePrice(product.prices);
+      const safeName = escapeHtml(product.name || 'Producto');
+      const safeSlug = encodeURIComponent(product.slug || '');
+      const safeImage = escapeHtml(image?.src || '');
+      const isOut = !product.is_in_stock || product.stock_status === 'outofstock';
+      const isVariable = product.type === 'variable';
+      const action = isVariable
+        ? `<a class="button button-secondary" href="/producto?slug=${safeSlug}">Ver opciones</a>`
+        : `<button class="button button-secondary rec-add" type="button"
+            data-id="${Number(product.id)}"
+            data-slug="${escapeHtml(product.slug || '')}"
+            data-name="${safeName}"
+            data-price="${escapeHtml(pricePlain)}"
+            data-image="${safeImage}"
+            ${isOut ? 'disabled' : ''}>${isOut ? 'Agotado' : 'Anadir'}</button>`;
+
+      return `
+        <article class="recommendation-card">
+          <a class="rec-media" href="/producto?slug=${safeSlug}" aria-label="Ver ${safeName}">
+            ${image ? `<img src="${safeImage}" alt="${escapeHtml(image.alt || product.name)}" loading="lazy">` : `<span aria-hidden="true">${safeName.slice(0, 1).toUpperCase()}</span>`}
+          </a>
+          <div class="rec-body">
+            <h3><a href="/producto?slug=${safeSlug}">${safeName}</a></h3>
+            <strong class="product-price">${priceHtml}</strong>
+            ${action}
+          </div>
+        </article>
+      `;
+    };
+
+    const bindRecommendationActions = () => {
+      recGrid?.querySelectorAll('.rec-add').forEach((button) => {
+        button.addEventListener('click', async () => {
+          button.disabled = true;
+          try {
+            await addCartItem({
+              id: Number(button.dataset.id),
+              slug: button.dataset.slug || '',
+              name: button.dataset.name || 'Producto',
+              price: button.dataset.price || '-',
+              image: button.dataset.image || undefined,
+              quantity: 1,
+            });
+            button.textContent = 'Anadido';
+          } catch (error) {
+            button.textContent = error instanceof Error ? error.message : 'Error';
+          } finally {
+            window.setTimeout(() => {
+              button.disabled = false;
+              button.textContent = 'Anadir';
+            }, 1200);
+          }
+        });
+      });
+    };
+
+    const loadCartRecommendations = async () => {
+      if (!recSection || !recGrid || !cartItems.length) {
+        if (recSection) recSection.hidden = true;
+        return;
+      }
+
+      const source = cartItems.find((item) => item.slug);
+      if (!source) {
+        recSection.hidden = true;
+        return;
+      }
+
+      try {
+        const detail = await cachedJson<StoreProduct[]>(
+          addStoreFields(`${shopApi.products}?slug=${encodeURIComponent(source.slug)}`),
+          {},
+          120_000,
+        );
+        const excluded = new Set(cartItems.map((item) => Number(item.id)));
+        const category = detail.data?.[0]?.categories?.[0];
+        const urls = [];
+
+        if (category) {
+          const categoryUrl = new URL(shopApi.products);
+          categoryUrl.searchParams.set('category', category.slug);
+          categoryUrl.searchParams.set('per_page', '6');
+          categoryUrl.searchParams.set('orderby', 'popularity');
+          urls.push(categoryUrl);
+        }
+
+        const fallbackUrl = new URL(shopApi.products);
+        fallbackUrl.searchParams.set('per_page', '6');
+        fallbackUrl.searchParams.set('orderby', 'popularity');
+        urls.push(fallbackUrl);
+
+        let products = [];
+        for (const url of urls) {
+          const result = await cachedJson<StoreProduct[]>(addStoreFields(url), {}, 60_000);
+          products = (result.data || [])
+            .filter((product) => !excluded.has(Number(product.id)))
+            .slice(0, 3);
+          if (products.length) break;
+        }
+
+        products = products
+          .filter((product) => !excluded.has(Number(product.id)))
+          .slice(0, 3);
+
+        if (!products.length) {
+          recSection.hidden = true;
+          return;
+        }
+
+        recGrid.innerHTML = products.map(recommendationCard).join('');
+        recSection.hidden = false;
+        bindRecommendationActions();
+      } catch {
+        recSection.hidden = true;
       }
     };
 
@@ -351,12 +489,13 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
         return `
           <article class="cart-item ${isInvalid ? 'has-issue' : ''}">
-            <div class="item-media">
+            <a class="item-media" href="${productUrl(item)}" aria-label="Ver ${name}">
               ${item.image ? `<img src="${image}" alt="" loading="lazy">` : `<span aria-hidden="true">${name.slice(0, 1).toUpperCase()}</span>`}
-            </div>
+            </a>
             <div class="item-info">
-              <strong>${name}</strong>
+              <strong><a href="${productUrl(item)}">${name}</a></strong>
               <p>${price} unidad · ${lineSubtotal}</p>
+              <a class="item-view" href="${productUrl(item)}">Ver producto</a>
               ${notice ? `<small class="item-notice">${escapeHtml(notice)}</small>` : ''}
             </div>
             <div class="quantity-control" aria-label="Cantidad de ${name}">
@@ -424,6 +563,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           loadTotals();
         });
       });
+
+      void loadCartRecommendations();
     };
 
     if (clearButton) {
@@ -562,6 +703,36 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   .cart-actions {
     display: flex;
     flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .cart-recommendations {
+    display: grid;
+    gap: 14px;
+    margin-top: 28px;
+  }
+
+  .cart-recommendations[hidden] {
+    display: none;
+  }
+
+  .recommendations-head {
+    display: grid;
+    gap: 4px;
+  }
+
+  .recommendations-head .eyebrow,
+  .recommendations-head h2 {
+    margin: 0;
+  }
+
+  .recommendations-head h2 {
+    font-size: 1.15rem;
+  }
+
+  .recommendations-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
   }
 
@@ -717,6 +888,12 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
   :global(.item-media img) { width: 100%; height: 100%; object-fit: cover; }
 
+  :global(.item-media:hover),
+  :global(.item-info a:hover),
+  :global(.recommendation-card a:hover) {
+    color: var(--color-primary);
+  }
+
   :global(.item-info strong) {
     display: block;
     font-size: 0.95rem;
@@ -728,6 +905,15 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     margin: 0;
     color: var(--color-body);
     font-size: 0.88rem;
+  }
+
+  :global(.item-view) {
+    display: inline-flex;
+    width: max-content;
+    margin-top: 6px;
+    color: var(--color-primary);
+    font-size: 0.82rem;
+    font-weight: 700;
   }
 
   :global(.item-notice) {
@@ -821,10 +1007,59 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
   :global(.remove-item:hover) { background: #e53935; color: #fff; }
 
+  :global(.recommendation-card) {
+    display: grid;
+    overflow: hidden;
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-item);
+    background: var(--color-canvas);
+  }
+
+  :global(.rec-media) {
+    display: grid;
+    aspect-ratio: 5 / 3;
+    place-items: center;
+    background: var(--color-surface-strong);
+    color: var(--color-primary);
+    font-size: 1.45rem;
+    font-weight: 800;
+    overflow: hidden;
+  }
+
+  :global(.rec-media img) {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  :global(.rec-body) {
+    display: grid;
+    gap: 8px;
+    padding: 10px;
+  }
+
+  :global(.rec-body h3) {
+    margin: 0;
+    font-size: 0.82rem;
+    line-height: 1.25;
+  }
+
+  :global(.rec-body .product-price) {
+    font-size: 0.82rem;
+  }
+
+  :global(.rec-body .button) {
+    width: 100%;
+    min-height: 32px;
+    padding: 0 10px;
+    font-size: 0.78rem;
+  }
+
   [hidden] { display: none; }
 
   @media (max-width: 860px) {
     .cart-shell { grid-template-columns: 1fr; }
+    .recommendations-grid { grid-template-columns: 1fr; }
 
     :global(.cart-item) { grid-template-columns: 1fr; }
     :global(.quantity-control),

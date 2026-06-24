@@ -167,6 +167,11 @@ const { active = 'home' } = Astro.props;
     "'": '&#039;',
   }[char]));
 
+  const productUrl = (item) => {
+    const slug = String(item?.slug || '').trim();
+    return slug ? `/producto?slug=${encodeURIComponent(slug)}` : '/tienda';
+  };
+
   const clearLocalSessionData = () => {
     try {
       sessionStorageKeys.forEach((key) => localStorage.removeItem(key));
@@ -483,12 +488,13 @@ const { active = 'home' } = Astro.props;
 
       return `
         <li class="canvas-item ${isInvalid ? 'has-issue' : ''}">
-          <div class="canvas-item-media">
+          <a class="canvas-item-media" href="${productUrl(item)}" aria-label="Ver ${name}">
             ${item.image ? '<img src="' + image + '" alt="" loading="lazy">' : '<span aria-hidden="true">' + name.slice(0, 1).toUpperCase() + '</span>'}
-          </div>
+          </a>
           <div class="canvas-item-info">
-            <strong>${name}</strong>
+            <strong><a href="${productUrl(item)}">${name}</a></strong>
             <p>${price} · ${lineSubtotal}</p>
+            <a class="canvas-item-view" href="${productUrl(item)}">Ver producto</a>
             ${notice ? `<small class="canvas-item-notice">${escapeHtml(notice)}</small>` : ''}
             <div class="canvas-quantity" aria-label="Cantidad de ${name}">
               <button class="canvas-qty-step" type="button" data-action="decrease" data-id="${id}" aria-label="Restar una unidad">-</button>
@@ -1032,6 +1038,15 @@ const { active = 'home' } = Astro.props;
     margin: 0;
     font-size: 0.82rem;
     color: var(--color-body);
+  }
+
+  :global(.canvas-item-view) {
+    display: inline-flex;
+    width: max-content;
+    margin-top: 4px;
+    color: var(--color-primary);
+    font-size: 0.76rem;
+    font-weight: 700;
   }
 
   :global(.canvas-item-notice) {

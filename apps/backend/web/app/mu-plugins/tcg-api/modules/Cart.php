@@ -310,7 +310,16 @@ final class TCG_Platform_API_Cart
 
     private static function item_payload(WC_Product $product, int $quantity, string $created_at = '', string $updated_at = ''): array
     {
-        $image_id = $product->get_image_id();
+        $parent = null;
+        if ($product->is_type('variation') && $product->get_parent_id() > 0) {
+            $parent_product = wc_get_product($product->get_parent_id());
+            if ($parent_product instanceof WC_Product) {
+                $parent = $parent_product;
+            }
+        }
+
+        $nav_product = $parent instanceof WC_Product ? $parent : $product;
+        $image_id = $product->get_image_id() ?: ($parent instanceof WC_Product ? $parent->get_image_id() : 0);
         $image = $image_id ? wp_get_attachment_image_url($image_id, 'woocommerce_thumbnail') : '';
         $price_raw = (float) $product->get_price();
         $stock_quantity = $product->managing_stock() ? $product->get_stock_quantity() : null;
@@ -331,7 +340,7 @@ final class TCG_Platform_API_Cart
         return [
             'id' => $product->get_id(),
             'product_id' => $product->get_id(),
-            'slug' => $product->get_slug(),
+            'slug' => $nav_product->get_slug(),
             'name' => $product->get_name(),
             'price' => self::money_label($price_raw),
             'price_raw' => $price_raw,
@@ -345,7 +354,7 @@ final class TCG_Platform_API_Cart
             'max_quantity' => $max_quantity,
             'is_valid' => $is_valid,
             'notice' => $notice,
-            'permalink' => $product->get_permalink(),
+            'permalink' => $nav_product->get_permalink(),
             'created_at' => $created_at,
             'updated_at' => $updated_at,
         ];

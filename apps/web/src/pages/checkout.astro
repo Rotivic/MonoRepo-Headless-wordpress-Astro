@@ -18,10 +18,16 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             <p class="lede">
               Flujo local de pruebas sin pasarela externa. Crea un pedido real en WooCommerce y lo deja en espera.
             </p>
+            <ol class="checkout-steps" aria-label="Progreso del checkout">
+              <li class="is-active" data-step-indicator="0">Contacto</li>
+              <li data-step-indicator="1">Direccion</li>
+              <li data-step-indicator="2">Entrega</li>
+              <li data-step-indicator="3">Resumen</li>
+            </ol>
           </div>
 
           <form class="checkout-panel" id="checkout-form">
-            <section class="block">
+            <section class="block checkout-step" data-step="0">
               <h2>Datos de contacto</h2>
               <div class="field">
                 <label for="email">Email</label>
@@ -37,7 +43,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
               </div>
             </section>
 
-            <section class="block">
+            <section class="block checkout-step" data-step="1" hidden>
               <h2>Direccion</h2>
               <div class="field">
                 <label for="address">Direccion</label>
@@ -73,7 +79,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
               </div>
             </section>
 
-            <section class="block">
+            <section class="block checkout-step" data-step="2" hidden>
               <h2>Entrega</h2>
               <div class="delivery-options" id="delivery-options" role="radiogroup" aria-label="Metodo de entrega">
                 <label>
@@ -97,7 +103,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
               </div>
             </section>
 
-            <section class="summary block">
+            <section class="summary block checkout-step" data-step="3" hidden>
               <h2>Resumen</h2>
               <div id="checkout-items"></div>
               <p id="checkout-empty" class="muted" hidden>No hay productos en el carrito.</p>
@@ -130,7 +136,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             </section>
 
             <p class="status-message" id="checkout-status" aria-live="polite"></p>
-            <button class="button button-primary" id="checkout-submit" type="submit" disabled>Crear pedido</button>
+            <div class="checkout-nav">
+              <button class="button button-secondary" id="checkout-prev" type="button" hidden>Atras</button>
+              <button class="button button-primary" id="checkout-next" type="button">Siguiente</button>
+              <button class="button button-primary" id="checkout-submit" type="submit" hidden disabled>Crear pedido</button>
+            </div>
           </form>
         </section>
       </main>
@@ -157,6 +167,10 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const submit         = document.querySelector('#checkout-submit');
     const totalsRoot     = document.querySelector('#checkout-totals');
     const deliveryRoot   = document.querySelector('#delivery-options');
+    const stepPanels     = Array.from(document.querySelectorAll('[data-step]'));
+    const stepIndicators = Array.from(document.querySelectorAll('[data-step-indicator]'));
+    const prevButton     = document.querySelector('#checkout-prev');
+    const nextButton     = document.querySelector('#checkout-next');
 
     const subtotalEl     = document.querySelector('#checkout-subtotal');
     const discountRow    = document.querySelector('#co-discount-row');
@@ -174,6 +188,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     let checkoutItems = [];
     let totalsData    = null;
     let appliedCoupon = '';
+    let currentStep    = 0;
+    const lastStep     = 3;
 
     const escapeHtml = (value) =>
       String(value ?? '').replace(/[&<>"']/g, (char) => ({
@@ -195,6 +211,42 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
     const redirectToLogin = () => {
       window.location.assign(`/login?next=${encodeURIComponent('/checkout')}`);
+    };
+
+    const productUrl = (item) => {
+      const slug = String(item.slug || '').trim();
+      if (!slug) return '/tienda';
+      return `/producto?slug=${encodeURIComponent(slug)}`;
+    };
+
+    const setStep = (step) => {
+      currentStep = Math.max(0, Math.min(lastStep, Number(step) || 0));
+      stepPanels.forEach((panel) => {
+        panel.hidden = Number(panel.dataset.step) !== currentStep;
+      });
+      stepIndicators.forEach((indicator) => {
+        const index = Number(indicator.dataset.stepIndicator);
+        indicator.classList.toggle('is-active', index === currentStep);
+        indicator.classList.toggle('is-complete', index < currentStep);
+      });
+      if (prevButton) prevButton.hidden = currentStep === 0;
+      if (nextButton) nextButton.hidden = currentStep === lastStep;
+      if (submit) submit.hidden = currentStep !== lastStep;
+      if (statusEl && currentStep !== lastStep) {
+        statusEl.textContent = '';
+        statusEl.dataset.state = '';
+      }
+    };
+
+    const validateStep = () => {
+      const panel = stepPanels.find((item) => Number(item.dataset.step) === currentStep);
+      const fields = Array.from(panel?.querySelectorAll('input, select, textarea') || []);
+      const invalid = fields.find((field) => typeof field.checkValidity === 'function' && !field.checkValidity());
+      if (invalid && typeof invalid.reportValidity === 'function') {
+        invalid.reportValidity();
+        return false;
+      }
+      return true;
     };
 
     const requireAuth = async () => {
@@ -332,7 +384,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
       itemsRoot.innerHTML = items.map((item) => `
         <article class="summary-item">
-          <strong>${escapeHtml(item.name)}</strong>
+          <strong><a href="${productUrl(item)}">${escapeHtml(item.name)}</a></strong>
           <span>${escapeHtml(item.line_subtotal || `${item.price} x ${item.quantity}`)}</span>
         </article>
       `).join('');
@@ -375,6 +427,10 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
     form?.addEventListener('submit', async (event) => {
       event.preventDefault();
+      if (currentStep !== lastStep) {
+        if (validateStep()) setStep(currentStep + 1);
+        return;
+      }
       const isAuthenticated = await requireAuth();
       if (!isAuthenticated) return;
 
@@ -404,6 +460,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       }
     });
 
+    prevButton?.addEventListener('click', () => setStep(currentStep - 1));
+    nextButton?.addEventListener('click', () => {
+      if (validateStep()) setStep(currentStep + 1);
+    });
+
     requireAuth().then(async (isAuthenticated) => {
       if (!isAuthenticated) return;
       const summary = await readCartSummary();
@@ -418,6 +479,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         }
       }
     });
+
+    setStep(0);
   </script>
 </BaseLayout>
 
@@ -455,6 +518,42 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     line-height: 1.7;
   }
 
+  .checkout-steps {
+    display: grid;
+    gap: 10px;
+    margin: 28px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .checkout-steps li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--color-body);
+    font-size: 0.92rem;
+    font-weight: 700;
+  }
+
+  .checkout-steps li::before {
+    content: "";
+    width: 12px;
+    height: 12px;
+    border: 2px solid var(--color-hairline);
+    border-radius: 50%;
+    background: var(--color-canvas);
+  }
+
+  .checkout-steps li.is-active {
+    color: var(--color-ink);
+  }
+
+  .checkout-steps li.is-active::before,
+  .checkout-steps li.is-complete::before {
+    border-color: var(--color-primary);
+    background: var(--color-primary);
+  }
+
   .checkout-panel,
   .block {
     display: grid;
@@ -471,6 +570,10 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   .block {
     border-bottom: 1px solid var(--color-hairline);
     padding-bottom: 18px;
+  }
+
+  .checkout-step[hidden] {
+    display: none;
   }
 
   .block h2 {
@@ -592,6 +695,16 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     font-weight: 600;
   }
 
+  .checkout-nav {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .checkout-nav .button {
+    min-width: 150px;
+  }
+
   :global(.summary-item) {
     display: flex;
     justify-content: space-between;
@@ -599,6 +712,10 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     border-bottom: 1px solid var(--color-hairline);
     padding: 10px 0;
     font-size: 0.92rem;
+  }
+
+  :global(.summary-item a:hover) {
+    color: var(--color-primary);
   }
 
   @media (max-width: 860px) {
